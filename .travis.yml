@@ -41,6 +41,7 @@ install:
   # Install Mosquitto for MQTT pull request builds.
   - if [ "$RUN_TEST" = "mqtt" ] && [ "$TRAVIS_PULL_REQUEST" != "false" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install -y mosquitto; fi
   - if [ "$RUN_TEST" = "mqtt" ] && [ "$TRAVIS_PULL_REQUEST" != "false" ] && [ "$TRAVIS_OS_NAME" = "osx" ]; then brew install mosquitto; fi
+  - if [ "$RUN_TEST" = "mqtt" ] && [ "$TRAVIS_PULL_REQUEST" != "false" ] && [ "$TRAVIS_OS_NAME" = "osx" ]; then brew services start mosquitto; fi
   # Install dependencies for Jobs tests.
   - if [ "$RUN_TEST" = "jobs" ] && [ "$TRAVIS_PULL_REQUEST" = "false" ]; then sudo apt-get install -y python3-setuptools python3-pip athena-jot; fi
   - if [ "$RUN_TEST" = "jobs" ] && [ "$TRAVIS_PULL_REQUEST" = "false" ]; then pip3 install --user wheel; fi
@@ -60,6 +61,8 @@ script:
   - if [ "$NETWORK_STACK" = "openssl" ]; then export IOT_IDENTIFIER="${IOT_IDENTIFIER}ossl"; fi
   # Set default compiler options. Individual test scripts may override this.
   - export COMPILER_OPTIONS="-Wall -Wextra -fsanitize=thread"
+  # Silence field initializer warnings for macOS.
+  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export COMPILER_OPTIONS=$COMPILER_OPTIONS" -Wno-missing-field-initializers"; fi
   # Choose the network abstraction.
   - if [ "$NETWORK_STACK" = "openssl" ]; then export IOT_NETWORK_USE_OPENSSL=1; else export IOT_NETWORK_USE_OPENSSL=0; fi
   # Get AWS credentials when not a pull request build.
