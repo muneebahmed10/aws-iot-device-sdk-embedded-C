@@ -137,6 +137,8 @@ bool _IotMqtt_ValidateConnect( const IotMqttConnectInfo_t * pConnectInfo )
                          "the maximum supported length of %hu.",
                          pConnectInfo->clientIdentifierLength,
                          maxClientIdLength );
+
+            IOT_SET_AND_GOTO_CLEANUP( false );
         }
     }
     else
