@@ -31,7 +31,7 @@
 #include <string.h>
 
 /* Error handling include. */
-#include "private/iot_error.h"
+#include "iot_error.h"
 
 /* Platform threads include. */
 #include "platform/iot_threads.h"
@@ -47,7 +47,6 @@
 #if IOT_TEST_DEMO == 1
     extern int DemoMain( int argc,
                          char ** argv );
-
 #else
     extern void RunTests( bool disableNetworkTests,
                           bool disableLongTests );

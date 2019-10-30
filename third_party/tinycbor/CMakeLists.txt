@@ -36,12 +36,9 @@ add_library( tinycbor
 
 # TinyCBOR include path.
 target_include_directories( tinycbor SYSTEM
-                            PUBLIC ${PROJECT_SOURCE_DIR}/third_party/tinycbor/tinycbor/src )
+                            PUBLIC tinycbor/src )
 
-# Link math library. This is not needed on Windows.
-if( NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Windows" )
-    target_link_libraries( tinycbor PRIVATE m )
-endif()
+target_link_libraries( tinycbor PRIVATE m )
 
 # Disable all warnings for this third-party library.
 target_compile_options( tinycbor
@@ -52,6 +49,6 @@ target_compile_options( tinycbor
                         /W0 /D_CRT_SECURE_NO_WARNINGS> )
 
 # Organization of TinyCBOR in folders.
-set_property( TARGET tinycbor PROPERTY FOLDER "third_party" )
+set_property( TARGET tinycbor PROPERTY FOLDER third_party )
 source_group( include FILES ${TINYCBOR_HEADERS} )
 source_group( source FILES ${TINYCBOR_SOURCES} )

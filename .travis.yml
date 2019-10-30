@@ -15,6 +15,13 @@ compiler:
 # Matrix of tests to run.
 jobs:
   include:
+    # Build checks for pull requests.
+    - if: type = pull_request
+      env: RUN_TEST=build
+    # Documentation check for pull requests.
+    - if: type = pull_request
+      env: RUN_TEST=doc
+    # Library tests.
     - env: RUN_TEST=common
     - env: RUN_TEST=mqtt NETWORK_STACK=mbedtls
     - env: RUN_TEST=mqtt NETWORK_STACK=openssl
@@ -23,8 +30,6 @@ jobs:
     - if: type = push
       compiler: gcc
       env: RUN_TEST=coverage
-    - if: type = pull_request
-      env: RUN_TEST=doc
     - os: osx
       osx_image: xcode10.3
       env: RUN_TEST=mqtt NETWORK_STACK=mbedtls
