@@ -30,6 +30,17 @@ jobs:
     - if: type = push
       compiler: gcc
       env: RUN_TEST=coverage
+    - os: osx
+      osx_image: xcode10.3
+      env: RUN_TEST=mqtt NETWORK_STACK=mbedtls
+      # Cache Homebrew for faster macOS builds.
+      cache:
+        directories:
+          - $HOME/Library/Caches/Homebrew
+          - /usr/local/Homebrew
+    - os: windows
+      env: RUN_TEST=mqtt NETWORK_STACK=mbedtls
+      compiler: msvc
 
 # Install dependencies.
 install:
