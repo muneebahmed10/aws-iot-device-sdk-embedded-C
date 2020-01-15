@@ -156,7 +156,7 @@ static bool _matchEndWildcards( const char * pTopicFilter,
 
     /* Determine if the last character is reached for both topic name and topic
      * filter for the '#' wildcard. */
-    endChar = ( nameIndex == topicNameLength - 1 ) && ( filterIndex == topicFilterLength - 3 );
+    endChar = ( nameIndex == ( topicNameLength - 1 ) ) && ( filterIndex == ( topicFilterLength - 3 ) );
 
     if( endChar == true )
     {
@@ -168,7 +168,7 @@ static bool _matchEndWildcards( const char * pTopicFilter,
     {
         /* Determine if the last character is reached for both topic name and topic
          * filter for the '+' wildcard. */
-        endChar = ( nameIndex == topicNameLength - 1 ) && ( filterIndex == topicFilterLength - 2 );
+        endChar = ( nameIndex == ( topicNameLength - 1 ) ) && ( filterIndex == ( topicFilterLength - 2 ) );
 
         if( endChar == true )
         {

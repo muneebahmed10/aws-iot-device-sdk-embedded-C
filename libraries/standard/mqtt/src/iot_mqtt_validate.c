@@ -405,7 +405,7 @@ static bool _validateWildcardPlus( uint16_t index,
     }
 
     /* Unless '+' is the last character in the filter, it must be succeeded by '/'. */
-    if( index < pSubscription->topicFilterLength - 1 )
+    if( index < ( pSubscription->topicFilterLength - 1 ) )
     {
         if( pSubscription->pTopicFilter[ index + 1 ] != '/' )
         {
@@ -431,7 +431,7 @@ static bool _validateWildcardHash( uint16_t index,
     bool status = true;
 
     /* '#' must be the last character in the filter. */
-    if( index != pSubscription->topicFilterLength - 1 )
+    if( index != ( pSubscription->topicFilterLength - 1 ) )
     {
         IotLogError( "Invalid topic filter %.*s -- '#' must be the last character.",
                      pSubscription->topicFilterLength,
