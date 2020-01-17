@@ -463,9 +463,6 @@ void _IotMqtt_InvokeSubscriptionCallback( _mqttConnection_t * pMqttConnection,
                                  IotMqttCallbackParam_t * ) = NULL;
     _topicMatchParams_t topicMatchParams = { 0 };
 
-    /* Link status is not checked when asserts are disabled. */
-    ( void ) linkStatus;
-
     /* Set the members of the search parameter. */
     topicMatchParams.pTopicName = pCallbackParam->u.message.info.pTopicName;
     topicMatchParams.topicNameLength = pCallbackParam->u.message.info.topicNameLength;

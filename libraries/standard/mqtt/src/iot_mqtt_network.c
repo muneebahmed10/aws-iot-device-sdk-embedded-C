@@ -485,9 +485,6 @@ static IotMqttError_t _deserializeIncomingPacket( _mqttConnection_t * pMqttConne
     IotMqttError_t status = IOT_MQTT_STATUS_PENDING;
     bool packetValidity = false;
 
-    /* Packet validity is not checked when asserts are disabled. */
-    ( void ) packetValidity;
-
     /* A buffer for remaining data must be allocated if remaining length is not 0. */
     IotMqtt_Assert( ( pIncomingPacket->remainingLength > 0 ) ==
                     ( pIncomingPacket->pRemainingData != NULL ) );
