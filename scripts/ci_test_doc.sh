@@ -77,17 +77,17 @@ fi
 # scripts/fix_doc_links.py -f -v doc/output &> fix_links.txt
 # cat fix_links.txt
 
-echo "Testing links in documentation"
-
-if [ -z "$TRAVIS" ]; then
-    python3 scripts/fix_doc_links.py doc/output -n 2 > links.txt 2>&1
-else
-    python3 scripts/fix_doc_links.py doc/output
-fi
-
-if [ -s links.txt ]; then
-    cat links.txt
-    exit 1
-fi
-
-echo "Done"
+#echo "Testing links in documentation"
+#
+#if [ -z "$TRAVIS" ]; then
+#    python3 scripts/fix_doc_links.py doc/output -n 2 > links.txt 2>&1
+#else
+#    python3 scripts/fix_doc_links.py doc/output
+#fi
+#
+#if [ -s links.txt ]; then
+#    cat links.txt
+#    exit 1
+#fi
+#
+#echo "Done"
