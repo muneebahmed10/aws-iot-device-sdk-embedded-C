@@ -1021,6 +1021,10 @@ typedef struct IotMqttNetworkInfo
     /* coverity[misra_c_2012_rule_19_2_violation] */
     union
     {
+        /**
+         * @var IotMqttNetworkInfo_t::setup
+         * @brief Structure to hold credentials and server info.
+         */
         struct
         {
             /**
@@ -1043,6 +1047,11 @@ typedef struct IotMqttNetworkInfo
              */
             IotNetworkCredentials_t pNetworkCredentialInfo;
         } setup;
+        /**<
+         * @struct setup
+         * @var struct setup
+         * @brief Structure to hold credentials and server info.
+         */
 
         /**
          * @brief An established transport-layer network connection.
@@ -1052,7 +1061,13 @@ typedef struct IotMqttNetworkInfo
          * valid when #IotMqttNetworkInfo_t::createNetworkConnection is `false`.
          */
         IotNetworkConnection_t pNetworkConnection;
-    } u /**< @brief Valid member depends of IotMqttNetworkInfo_t.createNetworkConnection. */;
+    } u;
+    /**<
+     * @union IotMqttNetworkInfo_t::u
+     * @var union IotMqttNetworkInfo_t::u
+     * @brief Valid member depends of IotMqttNetworkInfo_t.createNetworkConnection.
+     * 
+     */
 
     /**
      * @brief The network functions used by the new MQTT connection.
