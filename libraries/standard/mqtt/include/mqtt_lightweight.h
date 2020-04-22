@@ -30,6 +30,13 @@
 
 #define MQTT_PACKET_TYPE_CONNECT         ( ( uint8_t ) 0x10U )
 #define MQTT_PACKET_TYPE_CONNACK         ( ( uint8_t ) 0x20U )
+#define MQTT_PACKET_TYPE_PUBLISH         ( ( uint8_t ) 0x30U )
+#define MQTT_PACKET_TYPE_PUBACK          ( ( uint8_t ) 0x40U )
+#define MQTT_PACKET_TYPE_PUBREC          ( ( uint8_t ) 0x50U )
+#define MQTT_PACKET_TYPE_PUBREL          ( ( uint8_t ) 0x60U )
+#define MQTT_PACKET_TYPE_PUBCOMP         ( ( uint8_t ) 0x70U )
+#define MQTT_PACKET_TYPE_SUBACK          ( ( uint8_t ) 0x90U )
+#define MQTT_PACKET_TYPE_PINGRESP        ( ( uint8_t ) 0xD0U )
 
 struct MQTTFixedBuffer;
 typedef struct MQTTFixedBuffer MQTTFixedBuffer_t;
@@ -58,7 +65,8 @@ typedef enum MQTTStatus
     MQTTSendFailed,
     MQTTRecvFailed,
     MQTTBadResponse,
-    MQTTServerRefused
+    MQTTServerRefused,
+    MQTTNoDataAvailable,
 } MQTTStatus_t;
 
 typedef enum MQTTQoS
@@ -168,5 +176,19 @@ MQTTStatus_t MQTT_DeserializePublish( const MQTTPacketInfo_t * const pIncomingPa
 MQTTStatus_t MQTT_DeserializeAck( const MQTTPacketInfo_t * const pIncomingPacket,
                                   uint16_t * const pPacketId,
                                   bool * const pSessionPresent );
+
+/**
+ * @brief Extract MQTT packet type and length from incoming packet.
+ *
+ * @param[in] readFunc Transport layer read function pointer.
+ * @param[out] pIncomingPacket Pointer to MQTTPacketInfo_t structure.
+ * where type, remaining length and packet identifier are stored.
+ *
+ * @return #MQTTSuccess on successful extraction of type and length,
+ * #MQTTBadResponse on failure and #MQTTNoDataAvailable if there is nothing to read.
+ *
+ */
+MQTTStatus_t MQTT_GetIncomingPacketTypeAndLength( MQTTTransportRecvFunc_t readFunc,
+                                                  MQTTPacketInfo_t * pIncomingPacket );
 
 #endif
