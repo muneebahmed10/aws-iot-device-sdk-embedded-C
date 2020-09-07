@@ -860,6 +860,9 @@ void IotMqtt_ReceiveCallback( IotNetworkConnection_t pNetworkConnection,
 
         _IotMqtt_CloseNetworkConnection( IOT_MQTT_BAD_PACKET_RECEIVED,
                                          pMqttConnection );
+
+        /* The network connection was closed so it will no longer be used. */
+        _IotMqtt_DecrementConnectionReferences( pMqttConnection );
     }
 }
 
