@@ -183,11 +183,18 @@ static int connectToServerWithBackoffRetries( NetworkContext_t * pNetworkContext
  */
 static int establishMqttSession( MQTTContext_t * pMqttContext,
                                  NetworkContext_t * pNetworkContext );
-
+/**
+ * @brief Dispatch incoming publishes and acks to response queues and
+ * command callbacks.
+ *
+ * @param[in] pMqttContext MQTT Context
+ * @param[in] pPacketInfo Pointer to incoming packet.
+ * @param[in] pDeserializedInfo Pointer to deserialized information from
+ * the incoming packet.
+ */
 static void subscriptionManager( MQTTContext_t * pMqttContext,
                                  MQTTPacketInfo_t * pPacketInfo,
-                                 uint16_t packetIdentifier,
-                                 MQTTPublishInfo_t * pPublishInfo );
+                                 MQTTDeserializedInfo_t * pDeserializedInfo );
 
 /*-----------------------------------------------------------*/
 
@@ -251,7 +258,6 @@ static int establishMqttSession( MQTTContext_t * pMqttContext,
     MQTTConnectInfo_t connectInfo;
     bool sessionPresent;
     MQTTFixedBuffer_t networkBuffer;
-    MQTTApplicationCallbacks_t callbacks;
     TransportInterface_t transport;
 
     assert( pMqttContext != NULL );
@@ -268,16 +274,8 @@ static int establishMqttSession( MQTTContext_t * pMqttContext,
     networkBuffer.pBuffer = buffer;
     networkBuffer.size = NETWORK_BUFFER_SIZE;
 
-    /* Application callbacks for receiving incoming publishes and incoming acks
-     * from MQTT library. */
-    callbacks.appCallback = subscriptionManager;
-
-    /* Application callback for getting the time for MQTT library. This time
-     * function will be used to calculate intervals in MQTT library.*/
-    callbacks.getTime = Clock_GetTimeMs;
-
     /* Initialize MQTT library. */
-    mqttStatus = MQTT_Init( pMqttContext, &transport, &callbacks, &networkBuffer );
+    mqttStatus = MQTT_Init( pMqttContext, &transport, Clock_GetTimeMs, subscriptionManager, &networkBuffer );
 
     if( mqttStatus != MQTTSuccess )
     {
@@ -334,19 +332,23 @@ static int establishMqttSession( MQTTContext_t * pMqttContext,
 /*-----------------------------------------------------------*/
 
 typedef enum operationType {
-    PROCESSLOOP,
-    PUBLISH,
-    SUBSCRIBE,
-    UNSUBSCRIBE,
-    PING,
-    DISCONNECT,
-    CONNECT
+    PROCESSLOOP, /**< @brief Call MQTT_ProcessLoop(). */
+    PUBLISH,     /**< @brief Call MQTT_Publish(). */
+    SUBSCRIBE,   /**< @brief Call MQTT_Subscribe(). */
+    UNSUBSCRIBE, /**< @brief Call MQTT_Unsubscribe(). */
+    PING,        /**< @brief Call MQTT_Ping(). */
+    DISCONNECT,  /**< @brief Call MQTT_Disconnect(). */
+    CONNECT,     /**< @brief Placeholder command for reconnecting a broken connection. */
+    TERMINATE    /**< @brief Exit the command loop and stop processing commands. */
 } CommandType_t;
 
 typedef struct CommandContext {
     /* Synchronization for boolean, not return status. */
     pthread_mutex_t lock;
     pthread_cond_t cond;
+    MQTTPublishInfo_t * pPublishInfo;
+    MQTTSubscribeInfo_t * pSubscribeInfo;
+    size_t subscriptionCount;
     bool complete;
     MQTTStatus_t returnStatus;
     DeQueue_t * pResponseQueue;
@@ -367,6 +369,7 @@ typedef struct Command {
 
 typedef struct ackInfo {
     uint16_t packetId;
+    //Command_t command;
     //TODO a single subscribe can be for multiple topics, so to avoid dynamic allocation
     //this should be moved to the command context.
     char pTopicFilter[ 100 ];
@@ -410,25 +413,30 @@ static void destroyCommandContext( CommandContext_t * pContext )
     pthread_cond_destroy( &( pContext->cond ) );
 }
 
-static void addPendingAck( uint16_t packetId,
+static bool addPendingAck( uint16_t packetId,
                            const char * pTopicFilter,
                            size_t topicFilterLength,
                            CommandContext_t * pContext,
                            CommandCallback_t callback )
 {
+    bool added = false;
     int32_t i = 0;
     for( i = 0; i < PENDING_ACKS_MAX_SIZE; i++ )
     {
         if( pendingAcks[ i ].packetId == MQTT_PACKET_ID_INVALID )
         {
             pendingAcks[ i ].packetId = packetId;
+            //pendingAcks[ i ].command = *pCommand;
             pendingAcks[ i ].pCommandContext = pContext;
             pendingAcks[ i ].callback = callback;
             memcpy( pendingAcks[ i ].pTopicFilter, pTopicFilter, topicFilterLength );
             pendingAcks[ i ].topicFilterLength = topicFilterLength;
+            added = true;
             break;
         }
     }
+
+    return added;
 }
 
 static AckInfo_t popAck( uint16_t packetId )
@@ -440,28 +448,54 @@ static AckInfo_t popAck( uint16_t packetId )
         if( pendingAcks[ i ].packetId == packetId )
         {
             ret = pendingAcks[ i ];
-            pendingAcks[ i ].packetId = MQTT_PACKET_ID_INVALID;
-            pendingAcks[ i ].topicFilterLength = 0;
-            pendingAcks[ i ].pCommandContext = NULL;
-            pendingAcks[ i ].callback = NULL;
+            if( true )
+            {
+                pendingAcks[ i ].packetId = MQTT_PACKET_ID_INVALID;
+                pendingAcks[ i ].topicFilterLength = 0;
+                pendingAcks[ i ].pCommandContext = NULL;
+                pendingAcks[ i ].callback = NULL;
+            }
             break;
         }
     }
+
+    if( ret.packetId == MQTT_PACKET_ID_INVALID )
+    {
+        LogError( ( "No ack found for packet ID %u.", packetId ) );
+    }
+
     return ret;
 }
 
 static void addSubscription( const char * pTopicFilter, size_t topicFilterLength, DeQueue_t * pQueue )
 {
-    int32_t i = 0;
-    for( i = 0; i < SUBSCRIPTIONS_MAX_COUNT; i++ )
+    int32_t i = 0, availableIndex = SUBSCRIPTIONS_MAX_COUNT;
+
+    /* Start at end of array, so that we will insert at the first available index. */
+    for( i = SUBSCRIPTIONS_MAX_COUNT - 1; i >= 0; i-- )
     {
         if( subscriptions[ i ].topicFilterLength == 0 )
         {
-            subscriptions[ i ].topicFilterLength = topicFilterLength;
-            subscriptions[ i ].responseQueue = pQueue;
-            memcpy( subscriptions[ i ].pTopicFilter, pTopicFilter, topicFilterLength );
-            break;
+            availableIndex = i;
         }
+        else if( ( subscriptions[ i ].topicFilterLength == topicFilterLength ) &&
+                 ( strncmp( pTopicFilter, subscriptions[ i ].pTopicFilter, topicFilterLength ) == 0 ) )
+        {
+            /* If a subscription already exists, don't do anything. */
+            if( subscriptions[ i ].responseQueue == pQueue )
+            {
+                LogWarn( ( "Subscription already exists." ) );
+                availableIndex = SUBSCRIPTIONS_MAX_COUNT;
+                break;
+            }
+        }
+    }
+
+    if( ( availableIndex < SUBSCRIPTIONS_MAX_COUNT ) && ( pQueue != NULL ) )
+    {
+        subscriptions[ availableIndex ].topicFilterLength = topicFilterLength;
+        subscriptions[ availableIndex ].responseQueue = pQueue;
+        memcpy( subscriptions[ availableIndex ].pTopicFilter, pTopicFilter, topicFilterLength );
     }
 }
 
@@ -477,7 +511,7 @@ static void removeSubscription( const char * pTopicFilter, size_t topicFilterLen
             {
                 subscriptions[ i ].topicFilterLength = 0;
                 subscriptions[ i ].responseQueue = NULL;
-                break;
+                memset( ( void * ) subscriptions[ i ].pTopicFilter, 0x00, sizeof( subscriptions[ i ].pTopicFilter ) );
             }
         }
     }
@@ -579,12 +613,10 @@ static MQTTStatus_t processCommand( Command_t * pCommand )
             packetId = MQTT_GetPacketId( &globalMqttContext );
             if( pCommand->commandType == SUBSCRIBE )
             {
-                LogInfo( ( "Subscribing to %.*s", pCommand->subscribeInfo.topicFilterLength, pCommand->subscribeInfo.pTopicFilter ) );
                 status = MQTT_Subscribe( &globalMqttContext, &( pCommand->subscribeInfo ), pCommand->subscriptionCount, packetId );
             }
             else
             {
-                LogInfo( ( "Unsubscribing from %.*s", pCommand->subscribeInfo.topicFilterLength, pCommand->subscribeInfo.pTopicFilter ) );
                 status = MQTT_Unsubscribe( &globalMqttContext, &( pCommand->subscribeInfo ), pCommand->subscriptionCount, packetId );
             }
             pCommand->pContext->returnStatus = status;
@@ -624,149 +656,24 @@ static MQTTStatus_t processCommand( Command_t * pCommand )
     return status;
 }
 
-static bool matchEndWildcards( const char * pTopicFilter,
-                                uint16_t topicNameLength,
-                                uint16_t topicFilterLength,
-                                uint16_t nameIndex,
-                                uint16_t filterIndex,
-                                bool * pMatch )
-{
-    bool status = false, endChar = false;
-
-    /* Determine if the last character is reached for both topic name and topic
-     * filter for the '#' wildcard. */
-    endChar = ( nameIndex == ( topicNameLength - 1U ) ) && ( filterIndex == ( topicFilterLength - 3U ) );
-
-    if( endChar == true )
-    {
-        /* Determine if the topic filter ends with the '#' wildcard. */
-        status = ( pTopicFilter[ filterIndex + 2U ] == '#' );
-    }
-
-    if( status == false )
-    {
-        /* Determine if the last character is reached for both topic name and topic
-         * filter for the '+' wildcard. */
-        endChar = ( nameIndex == ( topicNameLength - 1U ) ) && ( filterIndex == ( topicFilterLength - 2U ) );
-
-        if( endChar == true )
-        {
-            /* Filter "sport/+" also matches the "sport/" but not "sport". */
-            status = ( pTopicFilter[ filterIndex + 1U ] == '+' );
-        }
-    }
-
-    *pMatch = status;
-
-    return status;
-}
-
 /*-----------------------------------------------------------*/
-
-static bool matchWildcards( const char * pTopicFilter,
-                             const char * pTopicName,
-                             uint16_t topicNameLength,
-                             uint16_t filterIndex,
-                             uint16_t * pNameIndex,
-                             bool * pMatch )
-{
-    bool status = false;
-
-    /* Check for wildcards. */
-    if( pTopicFilter[ filterIndex ] == '+' )
-    {
-        /* Move topic name index to the end of the current level.
-         * This is identified by '/'. */
-        while( ( *pNameIndex < topicNameLength ) && ( pTopicName[ *pNameIndex ] != '/' ) )
-        {
-            ( *pNameIndex )++;
-        }
-
-        ( *pNameIndex )--;
-    }
-    else if( pTopicFilter[ filterIndex ] == '#' )
-    {
-        /* Subsequent characters don't need to be checked for the
-         * multi-level wildcard. */
-        *pMatch = true;
-        status = true;
-    }
-    else
-    {
-        /* Any character mismatch other than '+' or '#' means the topic
-         * name does not match the topic filter. */
-        *pMatch = false;
-        status = true;
-    }
-
-    return status;
-}
-
-/*-----------------------------------------------------------*/
-
-static bool topicFilterMatch( const char * pTopicName,
-                               uint16_t topicNameLength,
-                               const char * pTopicFilter,
-                               uint16_t topicFilterLength )
-{
-    bool status = false, matchFound = false;
-    uint16_t nameIndex = 0, filterIndex = 0;
-
-    while( ( nameIndex < topicNameLength ) && ( filterIndex < topicFilterLength ) )
-    {
-        /* Check if the character in the topic name matches the corresponding
-         * character in the topic filter string. */
-        if( pTopicName[ nameIndex ] == pTopicFilter[ filterIndex ] )
-        {
-            /* Handle special corner cases regarding wildcards at the end of
-             * topic filters, as documented by the MQTT protocol spec. */
-            matchFound = matchEndWildcards( pTopicFilter,
-                                             topicNameLength,
-                                             topicFilterLength,
-                                             nameIndex,
-                                             filterIndex,
-                                             &status );
-        }
-        else
-        {
-            /* Check for matching wildcards. */
-            matchFound = matchWildcards( pTopicFilter,
-                                          pTopicName,
-                                          topicNameLength,
-                                          filterIndex,
-                                          &nameIndex,
-                                          &status );
-        }
-
-        if( matchFound == true )
-        {
-            break;
-        }
-
-        /* Increment indexes. */
-        nameIndex++;
-        filterIndex++;
-    }
-
-    if( status == false )
-    {
-        /* If the end of both strings has been reached, they match. */
-        status = ( ( nameIndex == topicNameLength ) && ( filterIndex == topicFilterLength ) );
-    }
-
-    return status;
-}
 
 static void subscriptionManager( MQTTContext_t * pMqttContext,
                                  MQTTPacketInfo_t * pPacketInfo,
-                                 uint16_t packetIdentifier,
-                                 MQTTPublishInfo_t * pPublishInfo )
+                                 MQTTDeserializedInfo_t * pDeserializedInfo )
 {
     assert( pMqttContext != NULL );
     assert( pPacketInfo != NULL );
     AckInfo_t ackInfo;
     MQTTStatus_t status = MQTTSuccess;
     bool isMatched = false;
+    size_t i;
+    uint16_t packetIdentifier = pDeserializedInfo->packetIdentifier;
+    MQTTPublishInfo_t * pPublishInfo = pDeserializedInfo->pPublishInfo;
+    MQTTSubscribeInfo_t * pSubscribeInfo = NULL;
+    CommandContext_t * pAckContext = NULL;
+    CommandCallback_t pAckCallback = NULL;
+    uint8_t * pSubackCodes = NULL;
 
     /* Handle incoming publish. The lower 4 bits of the publish packet
      * type is used for the dup, QoS, and retain flags. Hence masking
@@ -780,17 +687,16 @@ static void subscriptionManager( MQTTContext_t * pMqttContext,
         {
             if( subscriptions[ i ].topicFilterLength > 0 )
             {
-                isMatched = topicFilterMatch( pPublishInfo->pTopicName, pPublishInfo->topicNameLength, subscriptions[ i ].pTopicFilter, subscriptions[ i ].topicFilterLength );
+                status = MQTT_MatchTopic( pPublishInfo->pTopicName,
+                                          pPublishInfo->topicNameLength,
+                                          subscriptions[ i ].pTopicFilter,
+                                          subscriptions[ i ].topicFilterLength,
+                                          &isMatched );
                 if( isMatched )
                 {
                     LogInfo( ( "Adding publish to response queue for %.*s", subscriptions[ i ].topicFilterLength, subscriptions[ i ].pTopicFilter ) );
                     copyPublishToQueue( pPublishInfo, subscriptions[ i ].responseQueue );
                 }
-                // if( strncmp( subscriptions[ i ].pTopicFilter, pPublishInfo->pTopicName, pPublishInfo->topicNameLength ) == 0 )
-                // {
-                //     LogInfo( ( "Adding publish to response queue for %.*s", pPublishInfo->topicNameLength, pPublishInfo->pTopicName ) );
-                //     copyPublishToQueue( pPublishInfo, subscriptions[ i ].responseQueue );
-                // }
             }
         }
     }
@@ -804,7 +710,7 @@ static void subscriptionManager( MQTTContext_t * pMqttContext,
                 ackInfo = popAck( packetIdentifier );
                 if( ackInfo.packetId == packetIdentifier )
                 {
-                    ackInfo.pCommandContext->returnStatus = status;
+                    ackInfo.pCommandContext->returnStatus = pDeserializedInfo->deserializationResult;
                     if( ackInfo.callback != NULL )
                     {
                         ackInfo.callback( ackInfo.pCommandContext );
@@ -816,20 +722,41 @@ static void subscriptionManager( MQTTContext_t * pMqttContext,
                 ackInfo = popAck( packetIdentifier );
                 if( ackInfo.packetId == packetIdentifier )
                 {
-                    LogInfo( ( "Adding subscription to %.*s", ackInfo.topicFilterLength, ackInfo.pTopicFilter ) );
-                    LogInfo( ( "Filter length: %d", ackInfo.topicFilterLength ) );
-                    addSubscription( ackInfo.pTopicFilter,
-                                     ackInfo.topicFilterLength,
-                                     ackInfo.pCommandContext->pResponseQueue );
+                    pAckContext = ackInfo.pCommandContext;
+                    pAckCallback = ackInfo.callback;
+                    pSubackCodes = pPacketInfo->pRemainingData + 2U;
+                    //pSubscribeInfo = pAckContext->pSubscribeInfo;
+
+                    for( i = 0; i < (pPacketInfo->remainingLength - 2); i++ )
+                    {
+                        if( pSubackCodes[ i ] != 0x80 )
+                        {
+                            LogInfo( ( "Adding subscription to %.*s",
+                                       ackInfo.topicFilterLength,
+                                       ackInfo.pTopicFilter ) );
+                            LogInfo( ( "Filter length: %d", ackInfo.topicFilterLength ) );
+                            addSubscription( ackInfo.pTopicFilter,
+                                             ackInfo.topicFilterLength,
+                                             pAckContext->pResponseQueue );
+                        }
+                        else
+                        {
+                            LogError( ( "Subscription to %.*s failed.",
+                                        ackInfo.topicFilterLength,
+                                        ackInfo.pTopicFilter ) );
+                        }
+                    }
+
+                    pAckContext->returnStatus = pDeserializedInfo->deserializationResult;
+                    if( pAckCallback != NULL )
+                    {
+                        pAckCallback( pAckContext );
+                    }
                 }
                 else
                 {
+                    LogError( ( "No subscription operation found matching packet id %u.", packetIdentifier ) );
                     status = MQTTBadResponse;
-                }
-                ackInfo.pCommandContext->returnStatus = status;
-                if( ackInfo.callback != NULL )
-                {
-                    ackInfo.callback( ackInfo.pCommandContext );
                 }
                 break;
 
@@ -837,21 +764,29 @@ static void subscriptionManager( MQTTContext_t * pMqttContext,
                 ackInfo = popAck( packetIdentifier );
                 if( ackInfo.packetId == packetIdentifier )
                 {
-                    LogInfo( ( "Removing subscription to %.*s", ackInfo.topicFilterLength, ackInfo.pTopicFilter ) );
-                    removeSubscription( ackInfo.pTopicFilter, ackInfo.topicFilterLength, ackInfo.pCommandContext->pResponseQueue );
+                    pAckContext = ackInfo.pCommandContext;
+                    pAckCallback = ackInfo.callback;
+                    //pSubscribeInfo = pAckContext->pSubscribeInfo;
+                    for( i = 0; i < 1; i++ )
+                    {
+                        removeSubscription( ackInfo.pTopicFilter, ackInfo.topicFilterLength, pAckContext->pResponseQueue );
+                    }
+
+                    pAckContext->returnStatus = pDeserializedInfo->deserializationResult;
+                    if( pAckCallback != NULL )
+                    {
+                        pAckCallback( pAckContext );
+                    }
                 }
                 else
                 {
+                    LogError( ( "No unsubscribe operation found matching packet id %u.", packetIdentifier ) );
                     status = MQTTBadResponse;
-                }
-                ackInfo.pCommandContext->returnStatus = status;
-                if( ackInfo.callback != NULL )
-                {
-                    ackInfo.callback( ackInfo.pCommandContext );
                 }
                 
                 break;
 
+            /* Nothing to do for these packets since they don't indicate command completion. */
             case MQTT_PACKET_TYPE_PUBREC:
             case MQTT_PACKET_TYPE_PUBREL:
                 break;
@@ -903,6 +838,10 @@ static void commandLoop()
                 pNewCommand = createCommand( PROCESSLOOP, NULL, NULL, 0, NULL, NULL );
                 addCommandToQueue( pNewCommand );
                 counter--;
+            }
+            if( pCommand->commandType == TERMINATE )
+            {
+                break;
             }
             if( pCommand->commandType == UNSUBSCRIBE )
             {
@@ -1146,6 +1085,11 @@ void * thread2( void * args )
     pthread_mutex_unlock( &context.lock );
     destroyCommandContext( &context );
     fprintf( tty2, "Operation wait complete.\n" );
+
+    /* Create command to stop command loop. */
+    LogInfo( ( "Beginning command queue termination." ) );
+    pCommand = createCommand( TERMINATE, NULL, NULL, 0, NULL, NULL );
+    addCommandToQueue( pCommand );
     //fclose( tty2 );
 
     // for( int i = 0; i < 10; i++ )
