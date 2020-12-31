@@ -23,18 +23,21 @@ FLAGS = -g -O0 -Wall -Wextra -Wpedantic
 
 LDFLAGS = -L/usr/local/opt/openssl@1.1/lib -lssl -lcrypto
 
-all: mqtt_agent.o mqtt_agent_helper.o mqtt_demo_plaintext.o
+all: mqtt_agent.o mqtt_agent_helper.o mqtt_demo_plaintext.o mqtt_demo_mutual_auth.o
 #	$(CC) $(FLAGS) $(LDFLAGS) $(INCLUDE_DIRS) $(SRC_FILES) -o mqtt_agent_demo
 	$(CC) $(FLAGS) $(LDFLAGS) $(INCLUDE_DIRS) $(SRC_FILES) $^ -o mqtt_agent_demo
 
 mqtt_agent.o: mqtt_agent.c mqtt_agent.h mqtt_agent_config.h
-	$(CC) -undefined dynamic_lookup $(FLAGS) $(INCLUDE_DIRS) mqtt_agent.c -c -o $@
+	$(CC) $(FLAGS) $(INCLUDE_DIRS) mqtt_agent.c -c -o $@
 
 mqtt_agent_helper.o: agent_helper/mqtt_agent_helper.c agent_helper/mqtt_agent_helper.h
 	$(CC) -undefined dynamic_lookup $(FLAGS) $(INCLUDE_DIRS) $< -c -o $@
 
 mqtt_demo_plaintext.o: mqtt_demo/mqtt_demo_plaintext.c
-	$(CC) -undefined dynamic_lookup $(FLAGS) $(INCLUDE_DIRS) $< -c -o $@
+	$(CC) $(FLAGS) $(INCLUDE_DIRS) $< -c -o $@
+
+mqtt_demo_mutual_auth.o: mqtt_demo/mqtt_demo_mutual_auth.c
+	$(CC) $(FLAGS) $(INCLUDE_DIRS) $< -c -o $@
 
 clean:
 	rm -rf mqtt_agent_demo mqtt_agent_demo.dSYM *.o
