@@ -524,11 +524,14 @@ static bool prvSocketConnect( NetworkContext_t * pNetworkContext, int mqttContex
         transportTimeout.tv_sec = 0;
         transportTimeout.tv_usec = 0;
 
-        ( void ) setsockopt( socketDescriptor,
-                                       SOL_SOCKET,
-                                       SO_RCVTIMEO,
-                                       &transportTimeout,
-                                       ( socklen_t ) sizeof( transportTimeout ) );
+        if( !isTLSConnection( mqttContextHandle ) )
+        {
+            ( void ) setsockopt( socketDescriptor,
+                                 SOL_SOCKET,
+                                 SO_RCVTIMEO,
+                                 &transportTimeout,
+                                 ( socklen_t ) sizeof( transportTimeout ) );
+        }
     }
 
     return xConnected;
@@ -633,6 +636,7 @@ static void prvConnectToMQTTBroker( int32_t mqttContextHandle )
 /*-----------------------------------------------------------*/
 
 extern void * plaintext_demo( void * args );
+extern void * mutual_auth_demo( void * args );
 
 static void prvConnectAndCreateDemoTasks( void * pvParameters )
 {
@@ -649,17 +653,18 @@ static void prvConnectAndCreateDemoTasks( void * pvParameters )
     /* Create the TCP connection to the broker, then the MQTT connection to the
      * same. */
     prvConnectToMQTTBroker( 0 );
+    prvConnectToMQTTBroker( 1 );
     MQTTPublishInfo_t publishInfo = { 0 };
     publishInfo.pTopicName = "/topic/name";
     publishInfo.topicNameLength = sizeof( "/topic/name" ) - 1;
     publishInfo.pPayload = "Hello World!";
     publishInfo.payloadLength = sizeof( "Hello World!" ) - 1;
     publishInfo.qos = MQTTQoS1;
-    for ( int i = 0; i < 5; i++ )
-        MQTTAgent_Publish(0 , &publishInfo, NULL, NULL, 0 );
+    // for ( int i = 0; i < 5; i++ )
+    //     MQTTAgent_Publish(0 , &publishInfo, NULL, NULL, 0 );
     pthread_create( &t1, NULL, prvMQTTAgentTask, NULL );
     pthread_create( &t2, NULL, plaintext_demo, ( void * ) 0 );
-    //pthread_create( &t3, NULL, plaintext_demo, ( void * ) 1 );
+    pthread_create( &t3, NULL, mutual_auth_demo, ( void * ) 1 );
 
     /* Selectively create demo tasks as per the compile time constant settings. */
 
@@ -668,7 +673,9 @@ static void prvConnectAndCreateDemoTasks( void * pvParameters )
      * the agent - in effect turning itself into the agent. */
     //prvMQTTAgentTask( NULL );
     pthread_join( t2, NULL );
+    pthread_join( t3, NULL );
     MQTTAgent_Disconnect( 0, NULL, NULL, 0 );
+    MQTTAgent_Disconnect( 1, NULL, NULL, 0 );
     MQTTAgent_Terminate( 0 );
     pthread_join( t1, NULL );
 }
