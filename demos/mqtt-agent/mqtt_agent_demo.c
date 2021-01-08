@@ -154,7 +154,7 @@
 /**
  * @brief Socket send and receive timeouts to use.  Specified in milliseconds.
  */
-#define TRANSPORT_SEND_RECV_TIMEOUT_MS    ( 750 )
+#define TRANSPORT_SEND_RECV_TIMEOUT_MS    ( 300 )
 
 /* This demo uses both TLS and plaintext. */
 struct NetworkContext
@@ -705,10 +705,18 @@ static void prvConnectAndCreateDemoTasks( void * pvParameters )
     pthread_join( t1, NULL );
 }
 
+FILE * plain_out;
+FILE * mutual_out;
+FILE * shadow_out;
+
 int main( int argc, const char **argv )
 {
     ( void ) argc;
     ( void ) argv;
+    /* Can fopen() files to separate logs. */
+    plain_out = stdout;
+    mutual_out = stdout;
+    shadow_out = stdout;
     prvConnectAndCreateDemoTasks( NULL );
     return 0;
 }

@@ -66,7 +66,7 @@
     #define LIBRARY_LOG_LEVEL    LOG_INFO
 #endif
 
-#include "logging_stack.h"
+#include "shadow_logging.h"
 
 /************ End of logging configuration ****************/
 

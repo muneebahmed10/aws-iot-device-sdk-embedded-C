@@ -450,7 +450,7 @@ bool PublishToTopic( const char * pTopicFilter,
                      const char * pPayload,
                      size_t payloadLength )
 {
-    bool returnStatus = false;
+    bool returnStatus = true;
     MQTTStatus_t mqttStatus = MQTTSuccess;
     uint8_t publishIndex = 0;
     MQTTContext_t * pMqttContext = &mqttContext;

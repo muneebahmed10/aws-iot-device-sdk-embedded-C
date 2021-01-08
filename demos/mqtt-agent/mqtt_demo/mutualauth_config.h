@@ -35,6 +35,8 @@
 
 /* Include header that defines log levels. */
 #include "logging_levels.h"
+#include <stdio.h>
+extern FILE * mutual_out;
 
 /* Logging configuration for the Demo. */
 #ifndef LIBRARY_LOG_NAME
@@ -44,7 +46,7 @@
     #define LIBRARY_LOG_LEVEL    LOG_DEBUG
 #endif
 
-#include "logging_stack.h"
+#include "mutual_logging.h"
 
 /************ End of logging configuration ****************/
 
