@@ -1,4 +1,4 @@
-CC = gcc
+CC ?= gcc
 
 INCLUDE_DIRS = -I . \
                -I ./agent_helper/ \
@@ -23,7 +23,12 @@ FLAGS = -g -O0 -Wall -Wextra -Wpedantic
 
 LDFLAGS = -L/usr/local/opt/openssl@1.1/lib -lssl -lcrypto
 
-all: mqtt_agent.o mqtt_agent_helper.o mqtt_demo_plaintext.o mqtt_demo_mutual_auth.o
+OBJECTS := $(wildcard */*.o)
+SHADOW_OBJECTS := $(wildcard shadow_demo/*.o)
+DEFENDER_OBJECTS := $(wildcard defender_demo/*.o)
+LD ?= ld
+
+all: mqtt_agent.o mqtt_agent_helper.o mqtt_demo_plaintext.o mqtt_demo_mutual_auth.o shadow_demo.o defender_demo.o
 #	$(CC) $(FLAGS) $(LDFLAGS) $(INCLUDE_DIRS) $(SRC_FILES) -o mqtt_agent_demo
 	$(CC) $(FLAGS) $(LDFLAGS) $(INCLUDE_DIRS) $(SRC_FILES) $^ -o mqtt_agent_demo
 
@@ -39,5 +44,16 @@ mqtt_demo_plaintext.o: mqtt_demo/mqtt_demo_plaintext.c
 mqtt_demo_mutual_auth.o: mqtt_demo/mqtt_demo_mutual_auth.c
 	$(CC) $(FLAGS) $(INCLUDE_DIRS) $< -c -o $@
 
+defender_demo.o: $(DEFENDER_OBJECTS)
+	$(MAKE) -C defender_demo/
+	$(LD) -r $^ -o $@
+
+shadow_demo.o: $(SHADOW_OBJECTS)
+	$(MAKE) -C shadow_demo/
+	$(LD) -r $^ -o $@
+
 clean:
 	rm -rf mqtt_agent_demo mqtt_agent_demo.dSYM *.o
+
+clean_objects:
+	rm -rf *.o *.dSYM

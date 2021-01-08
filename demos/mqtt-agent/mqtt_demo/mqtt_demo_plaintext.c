@@ -108,12 +108,11 @@
 
 /*-----------------------------------------------------------*/
 
-const MQTTContextHandle_t plaintextHandle = 0;
 /**
  * @brief Array to keep subscription topics.
  * Used to re-subscribe to topics that failed initial subscription attempts.
  */
-static MQTTSubscribeInfo_t pGlobalSubscriptionList[ 1 ];
+//static MQTTSubscribeInfo_t pGlobalSubscriptionList[ 1 ];
 
 /**
  * @brief Status of latest Subscribe ACK;
@@ -145,7 +144,7 @@ static uint32_t generateRandomNumber();
  *
  * @return EXIT_FAILURE on failure; EXIT_SUCCESS on success.
  */
-static int subscribePublishLoop( MQTTContextHandle_t mqttContextHandle );
+static int subscribePublishLoop( MQTTContextHandle_t mqttContextHandle, const char * topic, uint16_t topicLen );
 
 /**
  * @brief The function to handle the incoming publishes.
@@ -165,7 +164,7 @@ static void handleIncomingPublish( MQTTPublishInfo_t * pPublishInfo,
  * @return EXIT_SUCCESS if SUBSCRIBE was successfully sent;
  * EXIT_FAILURE otherwise.
  */
-static int subscribeToTopic( MQTTContextHandle_t pMqttContext );
+static int subscribeToTopic( MQTTContextHandle_t pMqttContext, const char * topic, uint16_t topicLen );
 
 /**
  * @brief Sends an MQTT UNSUBSCRIBE to unsubscribe from
@@ -176,7 +175,7 @@ static int subscribeToTopic( MQTTContextHandle_t pMqttContext );
  * @return EXIT_SUCCESS if UNSUBSCRIBE was successfully sent;
  * EXIT_FAILURE otherwise.
  */
-static int unsubscribeFromTopic( MQTTContextHandle_t pMqttContext );
+static int unsubscribeFromTopic( MQTTContextHandle_t pMqttContext, const char * topic, uint16_t topicLen );
 
 /**
  * @brief Sends an MQTT PUBLISH to #MQTT_EXAMPLE_TOPIC defined at
@@ -187,7 +186,7 @@ static int unsubscribeFromTopic( MQTTContextHandle_t pMqttContext );
  * @return EXIT_SUCCESS if PUBLISH was successfully sent;
  * EXIT_FAILURE otherwise.
  */
-static int publishToTopic( MQTTContextHandle_t pMqttContext );
+static int publishToTopic( MQTTContextHandle_t pMqttContext, const char * topic, uint16_t topicLen );
 
 /**
  * @brief Function to handle resubscription of topics on Subscribe
@@ -195,7 +194,7 @@ static int publishToTopic( MQTTContextHandle_t pMqttContext );
  *
  * @param[in] pMqttContext MQTT context pointer.
  */
-static int handleResubscribe( MQTTContextHandle_t pMqttContext );
+static int handleResubscribe( MQTTContextHandle_t pMqttContext, const char * topic, uint16_t topicLen );
 
 /*-----------------------------------------------------------*/
 
@@ -211,15 +210,15 @@ static void handleIncomingPublish( MQTTPublishInfo_t * pPublishInfo,
 {
     assert( pPublishInfo != NULL );
     receivedCount++;
-
-    ( void ) packetIdentifier;
+    const char * topic = ( const char * ) packetIdentifier;
+    assert( topic );
 
     /* Process incoming Publish. */
     LogInfo( ( "Incoming QOS : %d.", pPublishInfo->qos ) );
 
     /* Verify the received publish is for the topic we have subscribed to. */
-    if( ( pPublishInfo->topicNameLength == MQTT_EXAMPLE_TOPIC_LENGTH ) &&
-        ( 0 == strncmp( MQTT_EXAMPLE_TOPIC,
+    if( ( pPublishInfo->topicNameLength >= MQTT_EXAMPLE_TOPIC_LENGTH ) &&
+        ( 0 == strncmp( topic,
                         pPublishInfo->pTopicName,
                         pPublishInfo->topicNameLength ) ) )
     {
@@ -232,9 +231,10 @@ static void handleIncomingPublish( MQTTPublishInfo_t * pPublishInfo,
     }
     else
     {
-        LogInfo( ( "Incoming Publish Topic Name: %.*s does not match subscribed topic.",
+        LogInfo( ( "Incoming Publish Topic Name: %.*s does not match subscribed topic %s.",
                    pPublishInfo->topicNameLength,
-                   pPublishInfo->pTopicName ) );
+                   pPublishInfo->pTopicName,
+                   topic) );
     }
 }
 
@@ -242,13 +242,21 @@ static void handleIncomingPublish( MQTTPublishInfo_t * pPublishInfo,
 #define CONNECTION_RETRY_MAX_ATTEMPTS            ( 5U )
 #define CONNECTION_RETRY_MAX_BACKOFF_DELAY_MS    ( 5000U )
 #define CONNECTION_RETRY_BACKOFF_BASE_MS         ( 500U )
-static int handleResubscribe( MQTTContextHandle_t pMqttContext )
+static int handleResubscribe( MQTTContextHandle_t pMqttContext, const char * topic, uint16_t topicLen )
 {
     int returnStatus = EXIT_SUCCESS;
     MQTTStatus_t mqttStatus = MQTTSuccess;
     BackoffAlgorithmStatus_t backoffAlgStatus = BackoffAlgorithmSuccess;
     BackoffAlgorithmContext_t retryParams;
     uint16_t nextRetryBackOff = 0U;
+    MQTTSubscribeInfo_t pGlobalSubscriptionList[ 1 ];
+
+    ( void ) memset( ( void * ) pGlobalSubscriptionList, 0x00, sizeof( pGlobalSubscriptionList ) );
+
+    /* This example subscribes to only one topic and uses QOS0. */
+    pGlobalSubscriptionList[ 0 ].qos = MQTTQoS0;
+    pGlobalSubscriptionList[ 0 ].pTopicFilter = topic;
+    pGlobalSubscriptionList[ 0 ].topicFilterLength = topicLen;
 
     /* Initialize retry attempts and interval. */
     BackoffAlgorithm_InitializeParams( &retryParams,
@@ -265,7 +273,7 @@ static int handleResubscribe( MQTTContextHandle_t pMqttContext )
         mqttStatus = MQTTAgent_SubscribeBlock( pMqttContext,
                                                pGlobalSubscriptionList,
                                                handleIncomingPublish,
-                                               NULL );
+                                               topic );
 
         if( ( mqttStatus != MQTTSuccess ) && ( mqttStatus != MQTTServerRefused ) )
         {
@@ -276,8 +284,8 @@ static int handleResubscribe( MQTTContextHandle_t pMqttContext )
         }
 
         LogInfo( ( "SUBSCRIBE sent for topic %.*s to broker.\n\n",
-                   MQTT_EXAMPLE_TOPIC_LENGTH,
-                   MQTT_EXAMPLE_TOPIC ) );
+                   topicLen,
+                   topic ) );
 
         /* Check if recent subscription request has been rejected. globalSubAckStatus is updated
          * in eventCallback to reflect the status of the SUBACK sent by the broker. It represents
@@ -308,24 +316,25 @@ static int handleResubscribe( MQTTContextHandle_t pMqttContext )
 
 /*-----------------------------------------------------------*/
 
-static int subscribeToTopic( MQTTContextHandle_t pMqttContext )
+static int subscribeToTopic( MQTTContextHandle_t pMqttContext, const char * topic, uint16_t topicLen )
 {
     int returnStatus = EXIT_SUCCESS;
     MQTTStatus_t mqttStatus;
+    MQTTSubscribeInfo_t pGlobalSubscriptionList[ 1 ];
 
     /* Start with everything at 0. */
     ( void ) memset( ( void * ) pGlobalSubscriptionList, 0x00, sizeof( pGlobalSubscriptionList ) );
 
     /* This example subscribes to only one topic and uses QOS0. */
     pGlobalSubscriptionList[ 0 ].qos = MQTTQoS0;
-    pGlobalSubscriptionList[ 0 ].pTopicFilter = MQTT_EXAMPLE_TOPIC;
-    pGlobalSubscriptionList[ 0 ].topicFilterLength = MQTT_EXAMPLE_TOPIC_LENGTH;
+    pGlobalSubscriptionList[ 0 ].pTopicFilter = topic;
+    pGlobalSubscriptionList[ 0 ].topicFilterLength = topicLen;
 
     /* Send SUBSCRIBE packet. */
     mqttStatus = MQTTAgent_SubscribeBlock( pMqttContext,
                                            pGlobalSubscriptionList,
                                            handleIncomingPublish,
-                                           NULL );
+                                           topic );
     globalSubAckStatus = mqttStatus;
 
     if( ( mqttStatus != MQTTSuccess ) && ( mqttStatus != MQTTServerRefused ) )
@@ -337,8 +346,8 @@ static int subscribeToTopic( MQTTContextHandle_t pMqttContext )
     else
     {
         LogInfo( ( "SUBSCRIBE sent for topic %.*s to broker.\n\n",
-                   MQTT_EXAMPLE_TOPIC_LENGTH,
-                   MQTT_EXAMPLE_TOPIC ) );
+                   topicLen,
+                   topic ) );
     }
 
     return returnStatus;
@@ -346,10 +355,11 @@ static int subscribeToTopic( MQTTContextHandle_t pMqttContext )
 
 /*-----------------------------------------------------------*/
 
-static int unsubscribeFromTopic( MQTTContextHandle_t pMqttContext )
+static int unsubscribeFromTopic( MQTTContextHandle_t pMqttContext, const char * topic, uint16_t topicLen )
 {
     int returnStatus = EXIT_SUCCESS;
     MQTTStatus_t mqttStatus;
+    MQTTSubscribeInfo_t pGlobalSubscriptionList[ 1 ];
 
     /* Start with everything at 0. */
     ( void ) memset( ( void * ) pGlobalSubscriptionList, 0x00, sizeof( pGlobalSubscriptionList ) );
@@ -357,12 +367,12 @@ static int unsubscribeFromTopic( MQTTContextHandle_t pMqttContext )
     /* This example subscribes to and unsubscribes from only one topic
      * and uses QOS0. */
     pGlobalSubscriptionList[ 0 ].qos = MQTTQoS0;
-    pGlobalSubscriptionList[ 0 ].pTopicFilter = MQTT_EXAMPLE_TOPIC;
-    pGlobalSubscriptionList[ 0 ].topicFilterLength = MQTT_EXAMPLE_TOPIC_LENGTH;
+    pGlobalSubscriptionList[ 0 ].pTopicFilter = topic;
+    pGlobalSubscriptionList[ 0 ].topicFilterLength = topicLen;
 
     /* Send UNSUBSCRIBE packet. */
     mqttStatus = MQTTAgent_UnsubscribeBlock( pMqttContext,
-                                   pGlobalSubscriptionList );
+                                             pGlobalSubscriptionList );
 
     if( mqttStatus != MQTTSuccess )
     {
@@ -373,8 +383,8 @@ static int unsubscribeFromTopic( MQTTContextHandle_t pMqttContext )
     else
     {
         LogInfo( ( "UNSUBSCRIBE sent for topic %.*s to broker.\n\n",
-                   MQTT_EXAMPLE_TOPIC_LENGTH,
-                   MQTT_EXAMPLE_TOPIC ) );
+                   topicLen,
+                   topic ) );
     }
 
     return returnStatus;
@@ -382,7 +392,7 @@ static int unsubscribeFromTopic( MQTTContextHandle_t pMqttContext )
 
 /*-----------------------------------------------------------*/
 
-static int publishToTopic( MQTTContextHandle_t pMqttContext )
+static int publishToTopic( MQTTContextHandle_t pMqttContext, const char * topic, uint16_t topicLen )
 {
     int returnStatus = EXIT_SUCCESS;
     MQTTStatus_t mqttStatus = MQTTSuccess;
@@ -393,8 +403,8 @@ static int publishToTopic( MQTTContextHandle_t pMqttContext )
 
     /* This example publishes to only one topic and uses QOS0. */
     publishInfo.qos = MQTTQoS0;
-    publishInfo.pTopicName = MQTT_EXAMPLE_TOPIC;
-    publishInfo.topicNameLength = MQTT_EXAMPLE_TOPIC_LENGTH;
+    publishInfo.pTopicName = topic;
+    publishInfo.topicNameLength = topicLen;
     publishInfo.pPayload = MQTT_EXAMPLE_MESSAGE;
     publishInfo.payloadLength = MQTT_EXAMPLE_MESSAGE_LENGTH;
 
@@ -411,8 +421,8 @@ static int publishToTopic( MQTTContextHandle_t pMqttContext )
     else
     {
         LogInfo( ( "PUBLISH send for topic %.*s to broker.",
-                   MQTT_EXAMPLE_TOPIC_LENGTH,
-                   MQTT_EXAMPLE_TOPIC ) );
+                   topicLen,
+                   topic ) );
     }
 
     return returnStatus;
@@ -420,7 +430,7 @@ static int publishToTopic( MQTTContextHandle_t pMqttContext )
 
 /*-----------------------------------------------------------*/
 
-static int subscribePublishLoop( MQTTContextHandle_t mqttContextHandle )
+static int subscribePublishLoop( MQTTContextHandle_t mqttContextHandle, const char * topic, uint16_t topicLen )
 {
     int returnStatus = EXIT_SUCCESS;
     uint32_t publishCount = 0;
@@ -435,9 +445,9 @@ static int subscribePublishLoop( MQTTContextHandle_t mqttContextHandle )
          * to be sent back to it from the broker. This demo uses QOS0 in Subscribe,
          * therefore, the Publish messages received from the broker will have QOS0. */
         LogInfo( ( "Subscribing to the MQTT topic %.*s.",
-                   MQTT_EXAMPLE_TOPIC_LENGTH,
-                   MQTT_EXAMPLE_TOPIC ) );
-        returnStatus = subscribeToTopic( mqttContextHandle );
+                   topicLen,
+                   topic ) );
+        returnStatus = subscribeToTopic( mqttContextHandle, topic, topicLen );
     }
 
     /* Check if recent subscription request has been rejected. globalSubAckStatus is updated
@@ -448,9 +458,9 @@ static int subscribePublishLoop( MQTTContextHandle_t mqttContextHandle )
          * Attempts are made according to the exponential backoff retry strategy
          * implemented in retryUtils. */
         LogInfo( ( "Server rejected initial subscription request. Attempting to re-subscribe to topic %.*s.",
-                   MQTT_EXAMPLE_TOPIC_LENGTH,
-                   MQTT_EXAMPLE_TOPIC ) );
-        returnStatus = handleResubscribe( mqttContextHandle );
+                   topicLen,
+                   topic ) );
+        returnStatus = handleResubscribe( mqttContextHandle, topic, topicLen );
     }
 
     if( returnStatus == EXIT_SUCCESS )
@@ -462,7 +472,7 @@ static int subscribePublishLoop( MQTTContextHandle_t mqttContextHandle )
             LogInfo( ( "Sending Publish to the MQTT topic %.*s.",
                        MQTT_EXAMPLE_TOPIC_LENGTH,
                        MQTT_EXAMPLE_TOPIC ) );
-            returnStatus = publishToTopic( mqttContextHandle );
+            returnStatus = publishToTopic( mqttContextHandle, topic, topicLen );
 
             LogInfo( ( "Delay before continuing to next iteration.\n\n" ) );
 
@@ -471,7 +481,7 @@ static int subscribePublishLoop( MQTTContextHandle_t mqttContextHandle )
         }
     }
 
-    while( receivedCount != maxPublishCount )
+    while( receivedCount < maxPublishCount )
     {
         LogInfo( ( "Received %d publishes, expected %d", receivedCount, maxPublishCount ) );
         sleep( 1 );
@@ -483,7 +493,7 @@ static int subscribePublishLoop( MQTTContextHandle_t mqttContextHandle )
         LogInfo( ( "Unsubscribing from the MQTT topic %.*s.",
                    MQTT_EXAMPLE_TOPIC_LENGTH,
                    MQTT_EXAMPLE_TOPIC ) );
-        returnStatus = unsubscribeFromTopic( mqttContextHandle );
+        returnStatus = unsubscribeFromTopic( mqttContextHandle, topic, topicLen );
     }
 
     /* Reset global SUBACK status variable after completion of subscription request cycle. */
@@ -493,6 +503,11 @@ static int subscribePublishLoop( MQTTContextHandle_t mqttContextHandle )
 }
 
 /*-----------------------------------------------------------*/
+
+struct threadContext {
+    MQTTContextHandle_t handle;
+    int num;
+};
 
 /**
  * @brief Entry point of demo.
@@ -510,7 +525,12 @@ void * plaintext_demo( void * args )
 {
     int returnStatus = EXIT_SUCCESS, i = 0;
     struct timespec tp;
-    MQTTContextHandle_t contextHandle = ( MQTTContextHandle_t ) args;
+    struct threadContext * ctx = ( struct threadContext * ) args;
+    //MQTTContextHandle_t contextHandle = ( MQTTContextHandle_t ) args;
+    char buf[ 50 ];
+    uint16_t topicLen;
+    snprintf( buf, 50, "%s%d", MQTT_EXAMPLE_TOPIC, ctx->num );
+    topicLen = strlen( buf );
 
     /* Seed pseudo random number generator used in the demo for
      * backoff period calculation when retrying failed network operations
@@ -526,7 +546,7 @@ void * plaintext_demo( void * args )
         if( 1 )
         {
             /* If TCP connection is successful, execute Subscribe/Publish loop. */
-            returnStatus = subscribePublishLoop( contextHandle );
+            returnStatus = subscribePublishLoop( ctx->handle, buf, topicLen );
         }
 
         if( returnStatus == EXIT_SUCCESS )
@@ -536,7 +556,7 @@ void * plaintext_demo( void * args )
         }
 
         LogInfo( ( "Short delay before starting the next iteration....\n" ) );
-        sleep( MQTT_SUBPUB_LOOP_DELAY_SECONDS );
+        //sleep( MQTT_SUBPUB_LOOP_DELAY_SECONDS );
     }
 
     return NULL;

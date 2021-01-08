@@ -847,6 +847,8 @@ static MQTTStatus_t addCommandToQueue( Command_t * pCommand,
     MQTTStatus_t statusReturn;
     //bool queueStatus;
 
+    ( void ) blockTimeMS;
+
     /* The application called an API function.  The API function was validated and
      * packed into a Command_t structure.  Now post a reference to the Command_t
      * structure to the MQTT agent for processing. */
@@ -1207,7 +1209,7 @@ static void mqttEventCallback( MQTTContext_t * pMqttContext,
     uint16_t packetIdentifier = pDeserializedInfo->packetIdentifier;
     CommandCallback_t ackCallback = NULL;
     MQTTAgentContext_t * pAgentContext;
-    const uint8_t uppderNibble = ( uint8_t ) 0xF0;
+    const uint8_t upperNibble = ( uint8_t ) 0xF0;
 
     assert( pMqttContext != NULL );
     assert( pPacketInfo != NULL );
@@ -1223,7 +1225,7 @@ static void mqttEventCallback( MQTTContext_t * pMqttContext,
     /* Handle incoming publish. The lower 4 bits of the publish packet type is used
      * for the dup, QoS, and retain flags. Hence masking out the lower bits to check
      * if the packet is publish. */
-    if( ( pPacketInfo->type & uppderNibble ) == MQTT_PACKET_TYPE_PUBLISH )
+    if( ( pPacketInfo->type & upperNibble ) == MQTT_PACKET_TYPE_PUBLISH )
     {
         handleIncomingPublish( pAgentContext, pDeserializedInfo->pPublishInfo );
     }
@@ -1479,6 +1481,7 @@ MQTTContext_t * MQTTAgent_CommandLoop( MQTTContextHandle_t * pErrHandle )
     MQTTContext_t * ret = NULL;
     CommandType_t currentCommandType = NONE;
     int32_t i = 0;
+    uint32_t numProcessed = 0;
 
     /* The command queue should have been created before this task gets created. */
     assert( commandQueue );
@@ -1492,8 +1495,10 @@ MQTTContext_t * MQTTAgent_CommandLoop( MQTTContextHandle_t * pErrHandle )
         retrieveCommand( &pCommand );
         /* Set the command type in case the command is released while processing. */
         currentCommandType = ( pCommand ) ? pCommand->commandType : NONE;
-        LogDebug( ( "Current command type: %d", currentCommandType ) );
+        //LogDebug( ( "Current command type: %d", currentCommandType ) );
         operationStatus = processCommand( pCommand, &ret );
+        numProcessed++;
+        //LogDebug( ( "Commands processed: %u", numProcessed ) );
 
         /* Return the current MQTT context if status was not successful. */
         if( operationStatus != MQTTSuccess )

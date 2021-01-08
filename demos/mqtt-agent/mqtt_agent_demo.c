@@ -21,6 +21,7 @@
  */
 
 /* Standard includes. */
+#include <pthread.h>
 #include <string.h>
 #include <stdio.h>
 #include <assert.h>
@@ -637,11 +638,23 @@ static void prvConnectToMQTTBroker( int32_t mqttContextHandle )
 
 extern void * plaintext_demo( void * args );
 extern void * mutual_auth_demo( void * args );
+extern void * shadow_demo( void * args );
+extern void * defender_demo( void * args );
+
+struct threadContext{
+    MQTTContextHandle_t handle;
+    int num;
+};
+
+#define NUM_PLAINTEXT_THREADS 5
 
 static void prvConnectAndCreateDemoTasks( void * pvParameters )
 {
     ( void ) pvParameters;
     pthread_t t1, t2, t3;
+    pthread_t t4;
+    pthread_t plaintexts[ NUM_PLAINTEXT_THREADS ];
+    struct threadContext ctx[ NUM_PLAINTEXT_THREADS ];
 
     /* Miscellaneous initialisation. */
     ulGlobalEntryTimeMs = Clock_GetTimeMs();
@@ -663,8 +676,15 @@ static void prvConnectAndCreateDemoTasks( void * pvParameters )
     // for ( int i = 0; i < 5; i++ )
     //     MQTTAgent_Publish(0 , &publishInfo, NULL, NULL, 0 );
     pthread_create( &t1, NULL, prvMQTTAgentTask, NULL );
-    pthread_create( &t2, NULL, plaintext_demo, ( void * ) 0 );
+    //pthread_create( &t2, NULL, plaintext_demo, ( void * ) 0 );
     pthread_create( &t3, NULL, mutual_auth_demo, ( void * ) 1 );
+    pthread_create( &t4, NULL, shadow_demo, ( void * ) 1 );
+    for( int i = 0; i < NUM_PLAINTEXT_THREADS; i++ )
+    {
+        ctx[ i ].handle = 0;
+        ctx[ i ].num = i;
+        pthread_create( &plaintexts[ i ], NULL, plaintext_demo, ( void * ) &ctx[ i ] );
+    }
 
     /* Selectively create demo tasks as per the compile time constant settings. */
 
@@ -672,8 +692,13 @@ static void prvConnectAndCreateDemoTasks( void * pvParameters )
      * agent as a separate thread, it simply calls the function that implements
      * the agent - in effect turning itself into the agent. */
     //prvMQTTAgentTask( NULL );
-    pthread_join( t2, NULL );
+    //pthread_join( t2, NULL );
     pthread_join( t3, NULL );
+    pthread_join( t4, NULL );
+    for( int i = 0; i < NUM_PLAINTEXT_THREADS; i++ )
+    {
+        pthread_join( plaintexts[ i ], NULL );
+    }
     MQTTAgent_Disconnect( 0, NULL, NULL, 0 );
     MQTTAgent_Disconnect( 1, NULL, NULL, 0 );
     MQTTAgent_Terminate( 0 );
