@@ -23,6 +23,23 @@
 #ifndef SHADOW_DEMO_HELPERS_H_
 #define SHADOW_DEMO_HELPERS_H_
 
+#include <stdio.h>
+
+extern FILE * shadow_out;
+
+/* Include header that defines log levels. */
+#include "logging_levels.h"
+
+/* Logging configuration for the Demo. */
+#ifndef LIBRARY_LOG_NAME
+    #define LIBRARY_LOG_NAME     "SHADOW_HELPERS"
+#endif
+#ifndef LIBRARY_LOG_LEVEL
+    #define LIBRARY_LOG_LEVEL    LOG_INFO
+#endif
+
+#include "shadow_logging.h"
+
 /* Include Demo Config as the first non-system header. */
 #include "demo_config.h"
 

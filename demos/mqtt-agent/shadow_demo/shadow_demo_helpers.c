@@ -39,8 +39,8 @@
 #include <time.h>
 
 /* Shadow includes */
-#include "mqtt_agent_helper.h"
 #include "shadow_demo_helpers.h"
+#include "mqtt_agent_helper.h"
 
 /* POSIX includes. */
 #include <unistd.h>
@@ -75,7 +75,7 @@
 /**
  * @brief Timeout for MQTT_ProcessLoop function in milliseconds.
  */
-#define MQTT_PROCESS_LOOP_TIMEOUT_MS        ( 1000U )
+#define MQTT_PROCESS_LOOP_TIMEOUT_MS        ( 100U )
 
 /**
  * @brief The maximum time interval in seconds which is allowed to elapse

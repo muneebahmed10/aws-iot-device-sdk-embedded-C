@@ -30,7 +30,7 @@ LD ?= ld
 
 all: mqtt_agent.o mqtt_agent_helper.o mqtt_demo_plaintext.o mqtt_demo_mutual_auth.o shadow_demo.o defender_demo.o
 #	$(CC) $(FLAGS) $(LDFLAGS) $(INCLUDE_DIRS) $(SRC_FILES) -o mqtt_agent_demo
-	$(CC) $(FLAGS) $(LDFLAGS) $(INCLUDE_DIRS) $(SRC_FILES) $^ -o mqtt_agent_demo
+	$(CC) $(FLAGS) $(INCLUDE_DIRS) $(SRC_FILES) $^ $(LDFLAGS) -o mqtt_agent_demo
 
 mqtt_agent.o: mqtt_agent.c mqtt_agent.h mqtt_agent_config.h
 	$(CC) $(FLAGS) $(INCLUDE_DIRS) mqtt_agent.c -c -o $@
