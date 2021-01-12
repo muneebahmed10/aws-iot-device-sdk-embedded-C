@@ -105,7 +105,7 @@ typedef struct PublishPackets
  * These stored outgoing publish messages are kept until a successful ack
  * is received.
  */
-static PublishPackets_t outgoingPublishPackets[ MAX_OUTGOING_PUBLISHES ] = { 0 };
+static PublishPackets_t outgoingPublishPackets[ MAX_OUTGOING_PUBLISHES ];
 
 /**
  * @brief The network buffer must remain valid for the lifetime of the MQTT context.
@@ -115,7 +115,7 @@ static PublishPackets_t outgoingPublishPackets[ MAX_OUTGOING_PUBLISHES ] = { 0 }
 /**
  * @brief The MQTT context used for MQTT operation.
  */
-static MQTTContext_t mqttContext = { 0 };
+static MQTTContext_t mqttContext;
 
 /**
  * @brief The network context used for Openssl operation.
@@ -129,213 +129,7 @@ static MQTTContext_t mqttContext = { 0 };
 static MQTTPublishCallback_t appPublishCallback = NULL;
 
 static MQTTContextHandle_t contextHandle = 1;
-/*-----------------------------------------------------------*/
 
-/**
- * @brief The random number generator to use for exponential backoff with
- * jitter retry logic.
- *
- * @return The generated random number.
- */
-static uint32_t generateRandomNumber();
-
-/**
- * @brief Get the free index in the #outgoingPublishPackets array at which an
- * outgoing publish can be stored.
- *
- * @param[out] pIndex The index at which an outgoing publish can be stored.
- *
- * @return false if no more publishes can be stored;
- * true if an index to store the next outgoing publish is obtained.
- */
-static bool getNextFreeIndexForOutgoingPublishes( uint8_t * pIndex );
-
-/**
- * @brief Clean up the outgoing publish at given index from the
- * #outgoingPublishPackets array.
- *
- * @param[in] index The index at which a publish message has to be cleaned up.
- */
-static void cleanupOutgoingPublishAt( uint8_t index );
-
-/**
- * @brief Clean up all the outgoing publishes in the #outgoingPublishPackets array.
- */
-static void cleanupOutgoingPublishes( void );
-
-/**
- * @brief Clean up the publish packet with the given packet id. in the
- * #outgoingPublishPackets array.
- *
- * @param[in] packetId Packet id of the packet to be clean.
- */
-static void cleanupOutgoingPublishWithPacketID( uint16_t packetId );
-
-/**
- * @brief Callback registered with the MQTT library.
- *
- * @param[in] pMqttContext MQTT context pointer.
- * @param[in] pPacketInfo Packet Info pointer for the incoming packet.
- * @param[in] pDeserializedInfo Deserialized information from the incoming packet.
- */
-static void mqttCallback( MQTTContext_t * pMqttContext,
-                          MQTTPacketInfo_t * pPacketInfo,
-                          MQTTDeserializedInfo_t * pDeserializedInfo );
-
-/**
- * @brief Resend the publishes if a session is re-established with the broker.
- *
- * This function handles the resending of the QoS1 publish packets, which are
- * maintained locally.
- *
- * @param[in] pMqttContext The MQTT context pointer.
- *
- * @return true if all the unacknowledged QoS1 publishes are re-sent successfully;
- * false otherwise.
- */
-static bool handlePublishResend( MQTTContext_t * pMqttContext );
-/*-----------------------------------------------------------*/
-
-static uint32_t generateRandomNumber()
-{
-    return( rand() );
-}
-/*-----------------------------------------------------------*/
-
-static bool getNextFreeIndexForOutgoingPublishes( uint8_t * pIndex )
-{
-    bool returnStatus = false;
-    uint8_t index = 0;
-
-    assert( outgoingPublishPackets != NULL );
-    assert( pIndex != NULL );
-
-    for( index = 0; index < MAX_OUTGOING_PUBLISHES; index++ )
-    {
-        /* A free index is marked by invalid packet id. Check if the the index
-         * has a free slot. */
-        if( outgoingPublishPackets[ index ].packetId == MQTT_PACKET_ID_INVALID )
-        {
-            returnStatus = true;
-            break;
-        }
-    }
-
-    /* Copy the available index into the output param. */
-    if( returnStatus == true )
-    {
-        *pIndex = index;
-    }
-
-    return returnStatus;
-}
-/*-----------------------------------------------------------*/
-
-static void cleanupOutgoingPublishAt( uint8_t index )
-{
-    assert( outgoingPublishPackets != NULL );
-    assert( index < MAX_OUTGOING_PUBLISHES );
-
-    /* Clear the outgoing publish packet. */
-    ( void ) memset( &( outgoingPublishPackets[ index ] ),
-                     0x00,
-                     sizeof( outgoingPublishPackets[ index ] ) );
-}
-/*-----------------------------------------------------------*/
-
-static void cleanupOutgoingPublishes( void )
-{
-    assert( outgoingPublishPackets != NULL );
-
-    /* Clean up all the outgoing publish packets. */
-    ( void ) memset( outgoingPublishPackets, 0x00, sizeof( outgoingPublishPackets ) );
-}
-/*-----------------------------------------------------------*/
-
-static void cleanupOutgoingPublishWithPacketID( uint16_t packetId )
-{
-    uint8_t index = 0;
-
-    assert( outgoingPublishPackets != NULL );
-    assert( packetId != MQTT_PACKET_ID_INVALID );
-
-    /* Clean up the saved outgoing publish with packet Id equal to packetId. */
-    for( index = 0; index < MAX_OUTGOING_PUBLISHES; index++ )
-    {
-        if( outgoingPublishPackets[ index ].packetId == packetId )
-        {
-            cleanupOutgoingPublishAt( index );
-
-            LogDebug( ( "Cleaned up outgoing publish packet with packet id %u.",
-                        packetId ) );
-
-            break;
-        }
-    }
-}
-/*-----------------------------------------------------------*/
-
-static void mqttCallback( MQTTContext_t * pMqttContext,
-                          MQTTPacketInfo_t * pPacketInfo,
-                          MQTTDeserializedInfo_t * pDeserializedInfo )
-{
-    assert( pMqttContext != NULL );
-    assert( pPacketInfo != NULL );
-    assert( pDeserializedInfo != NULL );
-
-    /* Suppress the unused parameter warning when asserts are disabled in
-     * build. */
-    ( void ) pMqttContext;
-}
-/*-----------------------------------------------------------*/
-
-static bool handlePublishResend( MQTTContext_t * pMqttContext )
-{
-    bool returnStatus = false;
-    MQTTStatus_t mqttStatus = MQTTSuccess;
-    uint8_t index = 0U;
-
-    assert( outgoingPublishPackets != NULL );
-
-    /* Resend all the QoS1 publishes still in the #outgoingPublishPackets array.
-     * These are the publishes that haven't received a PUBACK yet. When a PUBACK
-     * is received, the corresponding publish is removed from the array. */
-    for( index = 0U; index < MAX_OUTGOING_PUBLISHES; index++ )
-    {
-        if( outgoingPublishPackets[ index ].packetId != MQTT_PACKET_ID_INVALID )
-        {
-            outgoingPublishPackets[ index ].pubInfo.dup = true;
-
-            LogDebug( ( "Sending duplicate PUBLISH with packet id %u.",
-                        outgoingPublishPackets[ index ].packetId ) );
-            mqttStatus = MQTT_Publish( pMqttContext,
-                                       &outgoingPublishPackets[ index ].pubInfo,
-                                       outgoingPublishPackets[ index ].packetId );
-
-            if( mqttStatus != MQTTSuccess )
-            {
-                LogError( ( "Sending duplicate PUBLISH for packet id %u "
-                            " failed with status %s.",
-                            outgoingPublishPackets[ index ].packetId,
-                            MQTT_Status_strerror( mqttStatus ) ) );
-                break;
-            }
-            else
-            {
-                LogDebug( ( "Sent duplicate PUBLISH successfully for packet id %u.",
-                            outgoingPublishPackets[ index ].packetId ) );
-            }
-        }
-    }
-
-    /* Were all the unacknowledged QoS1 publishes successfully re-sent? */
-    if( index == MAX_OUTGOING_PUBLISHES )
-    {
-        returnStatus = true;
-    }
-
-    return returnStatus;
-}
 /*-----------------------------------------------------------*/
 
 bool EstablishMqttSession( MQTTContextHandle_t handle, MQTTPublishCallback_t publishCallback )
@@ -492,7 +286,7 @@ bool PublishToTopic( const char * pTopicFilter,
         {
             LogError( ( "Failed to send PUBLISH packet to broker with error = %s.",
                         MQTT_Status_strerror( mqttStatus ) ) );
-            cleanupOutgoingPublishAt( publishIndex );
+            //cleanupOutgoingPublishAt( publishIndex );
             returnStatus = false;
         }
         else

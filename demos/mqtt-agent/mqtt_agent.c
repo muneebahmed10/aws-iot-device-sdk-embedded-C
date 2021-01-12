@@ -889,6 +889,7 @@ static MQTTStatus_t processCommand( Command_t * pCommand,
     MQTTAgentContext_t * pAgentContext;
     MQTTContext_t * pMQTTContext;
     size_t i;
+    bool runProcessLoops = true;
     const uint32_t processLoopTimeoutMs = 0;
     const size_t maxNewSubscriptionsInOneGo = ( size_t ) 1; /* The agent interface only allows one subscription command at a time. */
 
@@ -948,6 +949,7 @@ static MQTTStatus_t processCommand( Command_t * pCommand,
 
             case DISCONNECT:
                 operationStatus = MQTT_Disconnect( pMQTTContext );
+                runProcessLoops = false;
 
                 break;
 
@@ -966,6 +968,7 @@ static MQTTStatus_t processCommand( Command_t * pCommand,
 
             case TERMINATE:
                 LogInfo( ( "Terminating command loop.\n" ) );
+                runProcessLoops = false;
 
             default:
                 break;
@@ -1009,9 +1012,12 @@ static MQTTStatus_t processCommand( Command_t * pCommand,
 //        pCommand->pMqttContext = pMQTTContext;
 //    }
 
+    /* Don't run process loops if there was an error or disconnect. */
+    runProcessLoops = ( operationStatus != MQTTSuccess ) ? false : runProcessLoops;
+
     /* Run a single iteration of the process loop if there were no errors and
      * the MQTT connection still exists. */
-    for( i = 0; i < MQTT_AGENT_MAX_SIMULTANEOUS_CONNECTIONS; i++ )
+    for( i = 0; ( i < MQTT_AGENT_MAX_SIMULTANEOUS_CONNECTIONS ) && ( runProcessLoops ); i++ )
     {
         pAgentContext = &( agentContexts[ i ] );
 
@@ -1030,6 +1036,8 @@ static MQTTStatus_t processCommand( Command_t * pCommand,
                                                         processLoopTimeoutMs );
                 }
             } while( packetProcessedDuringLoop == true );
+
+            runProcessLoops = ( operationStatus == MQTTSuccess );
         }
     }
 

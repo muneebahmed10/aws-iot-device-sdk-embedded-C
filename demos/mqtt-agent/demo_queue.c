@@ -74,17 +74,15 @@ void DeQueue_PushBack( DeQueue_t * pQueue, DeQueueElement_t * pElement )
     if( pOldBack == NULL )
     {
         pQueue->pHead = pElement;
-        pQueue->pTail = pElement;
-        pElement->pNext = NULL;
-        pElement->pPrevious = NULL;
     }
     else
     {
         pOldBack->pNext = pElement;
-        pElement->pPrevious = pOldBack;
-        pElement->pNext = NULL;
-        pQueue->pTail = pElement;
     }
+    pQueue->pTail = pElement;
+    pElement->pPrevious = pOldBack;
+    pElement->pNext = NULL;
+
     pQueue->len++;
     
     pthread_mutex_unlock( &( pQueue->lock ) );
@@ -101,18 +99,16 @@ void DeQueue_PushFront( DeQueue_t * pQueue, DeQueueElement_t * pElement )
 
     if( pOldFront == NULL )
     {
-        pQueue->pHead = pElement;
         pQueue->pTail = pElement;
-        pElement->pNext = NULL;
-        pElement->pPrevious = NULL;
     }
     else
     {
         pOldFront->pPrevious = pElement;
-        pElement->pNext = pOldFront;
-        pElement->pPrevious = NULL;
-        pQueue->pHead = pElement;
     }
+    pQueue->pHead = pElement;
+    pElement->pNext = pOldFront;
+    pElement->pPrevious = NULL;
+
     pQueue->len++;
 
     pthread_mutex_unlock( &( pQueue->lock ) );

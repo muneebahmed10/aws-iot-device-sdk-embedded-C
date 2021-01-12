@@ -119,69 +119,11 @@ typedef struct PublishPackets
  * These stored outgoing publish messages are kept until a successful ack
  * is received.
  */
-static PublishPackets_t outgoingPublishPackets[ MAX_OUTGOING_PUBLISHES ] = { 0 };
+static PublishPackets_t outgoingPublishPackets[ MAX_OUTGOING_PUBLISHES ];
 
 static IncomingPublishCallback_t shadowCallback = NULL;
 static MQTTContextHandle_t contextHandle = 1;
 
-/*-----------------------------------------------------------*/
-
-/**
- * @brief The random number generator to use for exponential backoff with
- * jitter retry logic.
- *
- * @return The generated random number.
- */
-static uint32_t generateRandomNumber();
-
-/**
- * @brief Function to get the free index at which an outgoing publish
- * can be stored.
- *
- * @param[out] pIndex The output parameter to return the index at which an
- * outgoing publish message can be stored.
- *
- * @return EXIT_FAILURE if no more publishes can be stored;
- * EXIT_SUCCESS if an index to store the next outgoing publish is obtained.
- */
-static int getNextFreeIndexForOutgoingPublishes( uint8_t * pIndex );
-
-
-/*-----------------------------------------------------------*/
-
-static uint32_t generateRandomNumber()
-{
-    return( rand() );
-}
-
-/*-----------------------------------------------------------*/
-
-/*-----------------------------------------------------------*/
-
-static int getNextFreeIndexForOutgoingPublishes( uint8_t * pIndex )
-{
-    int returnStatus = EXIT_FAILURE;
-    uint8_t index = 0;
-
-    assert( outgoingPublishPackets != NULL );
-    assert( pIndex != NULL );
-
-    for( index = 0; index < MAX_OUTGOING_PUBLISHES; index++ )
-    {
-        /* A free index is marked by invalid packet id.
-         * Check if the the index has a free slot. */
-        if( outgoingPublishPackets[ index ].packetId == MQTT_PACKET_ID_INVALID )
-        {
-            returnStatus = EXIT_SUCCESS;
-            break;
-        }
-    }
-
-    /* Copy the available index into the output param. */
-    *pIndex = index;
-
-    return returnStatus;
-}
 /*-----------------------------------------------------------*/
 
 void HandleOtherIncomingPacket( MQTTPacketInfo_t * pPacketInfo,
@@ -191,9 +133,6 @@ void HandleOtherIncomingPacket( MQTTPacketInfo_t * pPacketInfo,
     ( void ) packetIdentifier;
     /* Handle other packets. */
 }
-
-/*-----------------------------------------------------------*/
-
 
 /*-----------------------------------------------------------*/
 
