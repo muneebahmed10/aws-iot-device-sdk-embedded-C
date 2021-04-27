@@ -50,9 +50,6 @@
 #include "logging_stack.h"
 
 /************ End of logging configuration ****************/
-/*_RB_ To document and add to the mqtt config defaults header file. */
-#define MQTT_AGENT_COMMAND_QUEUE_LENGTH     ( 25 )
-#define MQTT_COMMAND_CONTEXTS_POOL_SIZE     ( 10 )
 
 /*
  * The maximum number of bytes that can be used in topic filter strings
@@ -60,6 +57,5 @@
  */
 #define MQTT_AGENT_MAX_SUBSCRIPTION_FILTER_LENGTH ( 100 )
 #define MQTT_AGENT_MAX_SIMULTANEOUS_CONNECTIONS ( 3 )
-#define MQTT_AGENT_MAX_SIMULTANEOUS_SUBSCRIPTIONS 50
 
 #endif /* ifndef MQTT_AGENT_CONFIG_H */

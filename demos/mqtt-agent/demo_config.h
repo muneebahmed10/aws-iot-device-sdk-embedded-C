@@ -160,6 +160,11 @@
     #define CLIENT_IDENTIFIER    "testclient"
 #endif
 
+#define THING_NAME CLIENT_IDENTIFIER
+#define THING_NAME_LENGTH                 ( ( uint16_t ) ( sizeof( THING_NAME ) - 1 ) )
+
+#define SUBSCRIPTION_MANAGER_MAX_SUBSCRIPTIONS	50
+
 /**
  * @brief Size of the network buffer for MQTT packets.
  */
@@ -177,7 +182,7 @@
  * on. The current value is given as an example. Please update for your specific
  * operating system version.
  */
-#define OS_VERSION                "10.14.6"
+#define OS_VERSION                "10.15.7"
 
 /**
  * @brief The name of the hardware platform the application is running on. The

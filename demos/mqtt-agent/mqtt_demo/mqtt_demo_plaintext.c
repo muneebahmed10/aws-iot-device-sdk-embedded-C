@@ -271,7 +271,7 @@ static int handleResubscribe( MQTTAgentContext_t * pMqttContext, const char * to
         mqttStatus = MQTTAgent_SubscribeBlock( pMqttContext,
                                                pGlobalSubscriptionList,
                                                handleIncomingPublish,
-                                               topic );
+                                               ( void * ) topic );
 
         if( ( mqttStatus != MQTTSuccess ) && ( mqttStatus != MQTTServerRefused ) )
         {
@@ -332,7 +332,7 @@ static int subscribeToTopic( MQTTAgentContext_t * pMqttContext, const char * top
     mqttStatus = MQTTAgent_SubscribeBlock( pMqttContext,
                                            pGlobalSubscriptionList,
                                            handleIncomingPublish,
-                                           topic );
+                                           ( void * ) topic );
     globalSubAckStatus = mqttStatus;
 
     if( ( mqttStatus != MQTTSuccess ) && ( mqttStatus != MQTTServerRefused ) )

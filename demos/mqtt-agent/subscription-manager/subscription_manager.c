@@ -102,7 +102,7 @@ void removeSubscription( SubscriptionElement_t * pxSubscriptionList,
                          const char * pcTopicFilterString,
                          uint16_t usTopicFilterLength )
 {
-    int32_t lIndex = 0;
+    uint32_t lIndex = 0;
 
     if( ( pxSubscriptionList == NULL ) ||
         ( pcTopicFilterString == NULL ) ||
@@ -110,8 +110,8 @@ void removeSubscription( SubscriptionElement_t * pxSubscriptionList,
     {
         LogError( ( "Invalid parameter. pxSubscriptionList=%p, pcTopicFilterString=%p,"
                     " usTopicFilterLength=%u.",
-                    pxSubscriptionList,
-                    pcTopicFilterString,
+                    ( void * ) pxSubscriptionList,
+                    ( void * ) pcTopicFilterString,
                     ( unsigned int ) usTopicFilterLength ) );
     }
     else
@@ -134,15 +134,15 @@ void removeSubscription( SubscriptionElement_t * pxSubscriptionList,
 bool handleIncomingPublishes( SubscriptionElement_t * pxSubscriptionList,
                               MQTTPublishInfo_t * pxPublishInfo )
 {
-    int32_t lIndex = 0;
+    uint32_t lIndex = 0;
     bool isMatched = false, publishHandled = false;
 
     if( ( pxSubscriptionList == NULL ) ||
         ( pxPublishInfo == NULL ) )
     {
         LogError( ( "Invalid parameter. pxSubscriptionList=%p, pxPublishInfo=%p,",
-                    pxSubscriptionList,
-                    pxPublishInfo ) );
+                    ( void * ) pxSubscriptionList,
+                    ( void * ) pxPublishInfo ) );
     }
     else
     {

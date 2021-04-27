@@ -41,7 +41,7 @@ bool Agent_MessageSend( AgentMessageContext_t * pMsgCtx,
     if( ( pMsgCtx != NULL ) && ( pCommandToSend != NULL ) )
     {
         DeQueue_t * pQueue = &( pMsgCtx->queue );
-        DeQueueElement_t * pNewElement = DeQueueElement_Create( pCommandToSend, sizeof( Command_t * ), free );
+        DeQueueElement_t * pNewElement = DeQueueElement_Create( *pCommandToSend, sizeof( Command_t * ), free );
         DeQueue_PushBack( pQueue, pNewElement );
         ret = true;
     }
@@ -86,6 +86,7 @@ Command_t * Agent_GetCommand( uint32_t blockTimeMs )
 {
     Command_t * pCommand = ( Command_t * ) malloc( sizeof( Command_t ) );
     ( void ) blockTimeMs;
+    memset( pCommand, 0x00, sizeof( Command_t ) );
     return pCommand;
 }
 

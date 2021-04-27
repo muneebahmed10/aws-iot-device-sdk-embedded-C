@@ -35,7 +35,7 @@ struct AgentMessageContext
     DeQueue_t queue;
 };
 
-bool AgentMessageSend( AgentMessageContext_t * pMsgCtx,
+bool Agent_MessageSend( AgentMessageContext_t * pMsgCtx,
                        Command_t * const * pCommandToSend,
                        uint32_t blockTimeMs );
 

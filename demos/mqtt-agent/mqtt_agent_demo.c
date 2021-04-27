@@ -32,6 +32,7 @@
 #include <sys/socket.h>
 
 /* Demo Specific configs. */
+#include "core_mqtt_serializer.h"
 #include "demo_config.h"
 
 /* MQTT library includes. */
@@ -40,16 +41,23 @@
 /* MQTT agent include. */
 #include "mqtt_agent.h"
 
+/* MQTT Agent interface. */
+#include "posix_agent_interface.h"
+
 /* Exponential backoff retry include. */
 #include "backoff_algorithm.h"
 
 /* OpenSSL sockets transport implementation. */
+#include "mqtt_agent_config.h"
 #include "openssl_posix.h"
 /* Plaintext sockets transport implementation. */
 #include "plaintext_posix.h"
 
 /* Clock for timer. */
 #include "clock.h"
+
+/* Subscription manager. */
+#include "subscription_manager.h"
 
 
 /**
@@ -156,6 +164,19 @@
  */
 #define TRANSPORT_SEND_RECV_TIMEOUT_MS    ( 300 )
 
+/**
+ * @brief Dimensions the buffer used to serialise and deserialise MQTT packets.
+ * @note Specified in bytes.  Must be large enough to hold the maximum
+ * anticipated MQTT payload.
+ */
+#ifndef MQTT_AGENT_NETWORK_BUFFER_SIZE
+    #define MQTT_AGENT_NETWORK_BUFFER_SIZE    ( 5000 )
+#endif
+
+#ifndef MQTT_AGENT_MAX_SIMULTANEOUS_CONNECTIONS
+    #define MQTT_AGENT_MAX_SIMULTANEOUS_CONNECTIONS ( 3 )
+#endif
+
 /* This demo uses both TLS and plaintext. */
 struct NetworkContext
 {
@@ -210,8 +231,9 @@ static bool prvSocketDisconnect( NetworkContext_t * pxNetworkContext, int mqttCo
  * @param[in] pxPublishInfo Info of incoming publish.
  * @param[in] The context specified when the MQTT connection was created.
  */
-static void prvUnsolicitedIncomingPublishCallback( MQTTPublishInfo_t * pxPublishInfo,
-                                                   void * pvContext );
+static void prvUnsolicitedIncomingPublishCallback( MQTTAgentContext_t * pAgentContext,
+                                                   uint16_t packetId,
+                                                   MQTTPublishInfo_t * pxPublishInfo );
 
 
 /**
@@ -261,6 +283,17 @@ static void prvConnectToMQTTBroker( int32_t mqttContextHandle );
 static NetworkContext_t networkContexts[ MQTT_AGENT_MAX_SIMULTANEOUS_CONNECTIONS ];
 
 /**
+ * @brief The network buffer must remain valid for the lifetime of the MQTT context.
+ */
+static uint8_t networkBuffers[ MQTT_AGENT_MAX_SIMULTANEOUS_CONNECTIONS ][ MQTT_AGENT_NETWORK_BUFFER_SIZE ];
+
+static MQTTAgentContext_t mqttAgentContexts[ MQTT_AGENT_MAX_SIMULTANEOUS_CONNECTIONS ];
+
+static AgentMessageContext_t messageContexts[ MQTT_AGENT_MAX_SIMULTANEOUS_CONNECTIONS ];
+
+static SubscriptionElement_t subscriptionLists[ MQTT_AGENT_MAX_SIMULTANEOUS_CONNECTIONS ][ SUBSCRIPTION_MANAGER_MAX_SUBSCRIPTIONS ];
+
+/**
  * @brief Global entry time into the application to use as a reference timestamp
  * in the #prvGetTimeMs function. #prvGetTimeMs will always return the difference
  * between the current time and the global entry time. This will reduce the chances
@@ -286,6 +319,16 @@ static MQTTStatus_t prvMQTTInit( int32_t mqttContextHandle )
 {
     TransportInterface_t xTransport;
     MQTTStatus_t xReturn;
+    MQTTFixedBuffer_t networkBuffer;
+    AgentMessageInterface_t messageInterface = {
+        .pMsgCtx = NULL,
+        .send = Agent_MessageSend,
+        .recv = Agent_MessageReceive,
+        .getCommand = Agent_GetCommand,
+        .releaseCommand = Agent_FreeCommand
+    };
+    ( void ) DeQueue_Create( &( messageContexts[ mqttContextHandle ].queue ) );
+    messageInterface.pMsgCtx = &( messageContexts[ mqttContextHandle ] );
 
     /* Fill in Transport Interface send and receive function pointers. */
     xTransport.pNetworkContext = &networkContexts[ mqttContextHandle ];
@@ -299,16 +342,21 @@ static MQTTStatus_t prvMQTTInit( int32_t mqttContextHandle )
         xTransport.recv = Plaintext_Recv;
     }
 
+    networkBuffer.pBuffer = &( networkBuffers[ mqttContextHandle ][ 0 ] );
+    networkBuffer.size = MQTT_AGENT_NETWORK_BUFFER_SIZE;
+
     /* Initialize MQTT library. */
-    xReturn = MQTTAgent_Init( mqttContextHandle,
+    xReturn = MQTTAgent_Init( &( mqttAgentContexts[ mqttContextHandle ] ),
+                              &messageInterface,
+                              &networkBuffer,
                               &xTransport,
                               Clock_GetTimeMs,
 
                               /* Callback to execute if receiving publishes on
                                * topics for which there is no subscription. */
                               prvUnsolicitedIncomingPublishCallback,
-                              /* Context to pass into the callback.  Not used. */
-                              NULL );
+                              /* Context to pass into the callback.  Subscription list. */
+                              subscriptionLists[ mqttContextHandle ] );
 
     return xReturn;
 }
@@ -368,18 +416,18 @@ static MQTTStatus_t prvMQTTConnect( bool xCleanSession, int32_t mqttContextHandl
 
     /* Send MQTT CONNECT packet to broker. MQTT's Last Will and Testament feature
      * is not used in this demo, so it is passed as NULL. */
-    xResult = MQTTAgent_Connect( mqttContextHandle,
-                                 &connectInfo,
-                                 NULL,
-                                 CONNACK_RECV_TIMEOUT_MS,
-                                 &xSessionPresent );
+    xResult = MQTT_Connect( &( mqttAgentContexts[ mqttContextHandle ].mqttContext ),
+                            &connectInfo,
+                            NULL,
+                            CONNACK_RECV_TIMEOUT_MS,
+                            &xSessionPresent );
 
     LogInfo( ( "Session present: %d\n", xSessionPresent ) );
 
     /* Resume a session if desired. */
     if( ( xResult == MQTTSuccess ) && !xCleanSession )
     {
-        xResult = MQTTAgent_ResumeSession( mqttContextHandle, xSessionPresent );
+        xResult = MQTTAgent_ResumeSession( &( mqttAgentContexts[ mqttContextHandle ] ), xSessionPresent );
     }
 
     return xResult;
@@ -563,20 +611,29 @@ static bool prvSocketDisconnect( NetworkContext_t * pxNetworkContext, int mqttCo
 
 /*-----------------------------------------------------------*/
 
-static void prvUnsolicitedIncomingPublishCallback( MQTTPublishInfo_t * pxPublishInfo,
-                                                   void * pvNotUsed )
+static void prvUnsolicitedIncomingPublishCallback( MQTTAgentContext_t * pAgentContext,
+                                                   uint16_t packetId,
+                                                   MQTTPublishInfo_t * pxPublishInfo )
 {
     char cOriginalChar, * pcLocation;
+    bool handled = false;
 
-    ( void ) pvNotUsed;
+    ( void ) pAgentContext;
+    ( void ) packetId;
 
-    /* Ensure the topic string is terminated for printing.  This will over-
-     * write the message ID, which is restored afterwards. */
-    pcLocation = ( char * ) &( pxPublishInfo->pTopicName[ pxPublishInfo->topicNameLength ] );
-    cOriginalChar = *pcLocation;
-    *pcLocation = 0x00;
-    LogWarn( ( "WARN:  Received an unsolicited publish from topic %s", pxPublishInfo->pTopicName ) );
-    *pcLocation = cOriginalChar;
+    handled = handleIncomingPublishes( ( SubscriptionElement_t * ) pAgentContext->pIncomingCallbackContext,
+                                       pxPublishInfo );
+
+    if( !handled )
+    {
+        /* Ensure the topic string is terminated for printing.  This will over-
+         * write the message ID, which is restored afterwards. */
+        pcLocation = ( char * ) &( pxPublishInfo->pTopicName[ pxPublishInfo->topicNameLength ] );
+        cOriginalChar = *pcLocation;
+        *pcLocation = 0x00;
+        LogWarn( ( "WARN:  Received an unsolicited publish from topic %s", pxPublishInfo->pTopicName ) );
+        *pcLocation = cOriginalChar;
+    }
 }
 
 /*-----------------------------------------------------------*/
@@ -586,9 +643,10 @@ static void * prvMQTTAgentTask( void * pvParameters )
     bool xNetworkResult = false;
     MQTTStatus_t xMQTTStatus = MQTTSuccess;
     MQTTContext_t * pMqttContext = NULL;
-    MQTTContextHandle_t mqttContextHandle = MQTT_AGENT_MAX_SIMULTANEOUS_CONNECTIONS;
+    int32_t mqttContextHandle = 0;
 
-    ( void ) pvParameters;
+    mqttContextHandle = ( int32_t ) pvParameters;
+    pMqttContext = &( mqttAgentContexts[ mqttContextHandle ].mqttContext );
 
     do
     {
@@ -597,11 +655,11 @@ static void * prvMQTTAgentTask( void * pvParameters )
          * which could be a disconnect.  If an error occurs the MQTT context on
          * which the error happened is returned so there can be an attempt to
          * clean up and reconnect however the application writer prefers. */
-        pMqttContext = MQTTAgent_CommandLoop( &mqttContextHandle );
+        xMQTTStatus = MQTTAgent_CommandLoop( &( mqttAgentContexts[ mqttContextHandle ] ) );
 
         /* Context is only returned if error occurred which will may have
          * disconnected the socket from the MQTT broker already. */
-        if( pMqttContext != NULL )
+        if( xMQTTStatus != MQTTSuccess )
         {
             assert( mqttContextHandle < MQTT_AGENT_MAX_SIMULTANEOUS_CONNECTIONS );
             /* Reconnect TCP. */
@@ -612,7 +670,13 @@ static void * prvMQTTAgentTask( void * pvParameters )
             /* MQTT Connect with a persistent session. */
             xMQTTStatus = prvMQTTConnect( false, mqttContextHandle );
         }
-    } while( pMqttContext );
+        else
+        {
+            ( void ) MQTT_Disconnect( pMqttContext );
+            xNetworkResult = prvSocketDisconnect( &networkContexts[ mqttContextHandle ], mqttContextHandle );
+            break;
+        }
+    } while( 1 );
 
     return NULL;
 }
@@ -639,10 +703,10 @@ static void prvConnectToMQTTBroker( int32_t mqttContextHandle )
 extern void * plaintext_demo( void * args );
 extern void * mutual_auth_demo( void * args );
 extern void * shadow_demo( void * args );
-extern void * defender_demo( void * args );
+//extern void * defender_demo( void * args );
 
 struct threadContext{
-    MQTTContextHandle_t handle;
+    MQTTAgentContext_t * handle;
     int num;
 };
 
@@ -675,13 +739,14 @@ static void prvConnectAndCreateDemoTasks( void * pvParameters )
     publishInfo.qos = MQTTQoS1;
     // for ( int i = 0; i < 5; i++ )
     //     MQTTAgent_Publish(0 , &publishInfo, NULL, NULL, 0 );
-    pthread_create( &t1, NULL, prvMQTTAgentTask, NULL );
+    pthread_create( &t1, NULL, prvMQTTAgentTask, ( void * ) 0 );
+    pthread_create( &t2, NULL, prvMQTTAgentTask, ( void * ) 1 );
     //pthread_create( &t2, NULL, plaintext_demo, ( void * ) 0 );
-    pthread_create( &t3, NULL, mutual_auth_demo, ( void * ) 1 );
-    pthread_create( &t4, NULL, shadow_demo, ( void * ) 1 );
+    pthread_create( &t3, NULL, mutual_auth_demo, ( void * ) &mqttAgentContexts[ 1 ] );
+    pthread_create( &t4, NULL, shadow_demo, ( void * ) &mqttAgentContexts[ 1 ] );
     for( int i = 0; i < NUM_PLAINTEXT_THREADS; i++ )
     {
-        ctx[ i ].handle = 0;
+        ctx[ i ].handle = &mqttAgentContexts[ 0 ];
         ctx[ i ].num = i;
         pthread_create( &plaintexts[ i ], NULL, plaintext_demo, ( void * ) &ctx[ i ] );
     }
@@ -699,10 +764,15 @@ static void prvConnectAndCreateDemoTasks( void * pvParameters )
     {
         pthread_join( plaintexts[ i ], NULL );
     }
-    MQTTAgent_Disconnect( 0, NULL, NULL, 0 );
-    MQTTAgent_Disconnect( 1, NULL, NULL, 0 );
-    MQTTAgent_Terminate( 0 );
+    CommandInfo_t disconnectInfo;
+    disconnectInfo.cmdCompleteCallback = NULL;
+    disconnectInfo.pCmdCompleteCallbackContext = NULL;
+    disconnectInfo.blockTimeMs = 0;
+    LogInfo( ( "Terminating Agent tasks" ) );
+    MQTTAgent_Terminate( &mqttAgentContexts[ 0 ], &disconnectInfo );
+    MQTTAgent_Terminate( &mqttAgentContexts[ 1 ], &disconnectInfo );
     pthread_join( t1, NULL );
+    pthread_join( t2, NULL );
 }
 
 FILE * plain_out;
