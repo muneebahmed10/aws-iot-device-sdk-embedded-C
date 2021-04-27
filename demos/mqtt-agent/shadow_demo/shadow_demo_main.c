@@ -256,7 +256,7 @@ static bool shadowDeleted = false;
  * @param[in] pPacketInfo Packet Info pointer for the incoming packet.
  * @param[in] pDeserializedInfo Deserialized information from the incoming packet.
  */
-static void eventCallback( MQTTPublishInfo_t * pPublishInfo, void * pContext );
+static void eventCallback( void * pContext, MQTTPublishInfo_t * pPublishInfo );
 
 /**
  * @brief Process payload from /update/delta topic.
@@ -575,7 +575,7 @@ static void updateAcceptedHandler( MQTTPublishInfo_t * pPublishInfo )
  * function to determine whether the incoming message is a device shadow message
  * or not. If it is, it handles the message depending on the message type.
  */
-static void eventCallback( MQTTPublishInfo_t * pPublishInfo, void * pContext )
+static void eventCallback( void * pContext, MQTTPublishInfo_t * pPublishInfo )
 {
     ShadowMessageType_t messageType = ShadowMessageTypeMaxNum;
     const char * pThingName = NULL;
@@ -674,7 +674,7 @@ void * shadow_demo( void * args )
 
     do
     {
-        returnStatus = EstablishMqttSession1( ( MQTTContextHandle_t ) args, eventCallback );
+        returnStatus = EstablishMqttSession1( ( MQTTAgentContext_t * ) args, eventCallback );
 
         if( returnStatus == EXIT_FAILURE )
         {

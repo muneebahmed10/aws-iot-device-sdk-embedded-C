@@ -2,7 +2,10 @@ CC ?= gcc
 
 INCLUDE_DIRS = -I . \
                -I ../agent_helper/ \
+               -I ../coreMQTT-Agent/source/include \
                -I ../ \
+               -I ../mqtt-agent-interface \
+               -I ../subscription-manager \
                -I ../../../libraries/standard/coreMQTT/source/include \
                -I ../../../libraries/standard/coreMQTT/source/interface \
                -I ../../../libraries/standard/coreJSON/source/include \

@@ -56,7 +56,7 @@ extern FILE * shadow_out;
  * @return EXIT_SUCCESS if an MQTT session is established;
  * EXIT_FAILURE otherwise.
  */
-int32_t EstablishMqttSession1( MQTTContextHandle_t handle, IncomingPublishCallback_t publishCallback );
+int32_t EstablishMqttSession1( MQTTAgentContext_t * handle, IncomingPubCallback_t publishCallback );
 
 /**
  * @brief Handle the incoming packet if it's not related to the device shadow.

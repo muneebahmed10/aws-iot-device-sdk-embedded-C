@@ -309,7 +309,7 @@ static uint32_t generateRandomNumber();
  *
  * @return EXIT_FAILURE on failure; EXIT_SUCCESS on success.
  */
-static int subscribePublishLoop( MQTTContextHandle_t pMqttContext,
+static int subscribePublishLoop( MQTTAgentContext_t * pMqttContext,
                                  bool * pClientSessionPresent );
 
 /**
@@ -318,8 +318,7 @@ static int subscribePublishLoop( MQTTContextHandle_t pMqttContext,
  * @param[in] pPublishInfo Pointer to publish info of the incoming publish.
  * @param[in] packetIdentifier Packet identifier of the incoming publish.
  */
-static void handleIncomingPublish( MQTTPublishInfo_t * pPublishInfo,
-                                   void * packetIdentifier );
+static void handleIncomingPublish( void * pUnused, MQTTPublishInfo_t * pPublishInfo );
 
 /**
  * @brief Sends an MQTT SUBSCRIBE to subscribe to #MQTT_EXAMPLE_TOPIC
@@ -330,7 +329,7 @@ static void handleIncomingPublish( MQTTPublishInfo_t * pPublishInfo,
  * @return EXIT_SUCCESS if SUBSCRIBE was successfully sent;
  * EXIT_FAILURE otherwise.
  */
-static int subscribeToTopic( MQTTContextHandle_t pMqttContext );
+static int subscribeToTopic( MQTTAgentContext_t * pMqttContext );
 
 /**
  * @brief Sends an MQTT UNSUBSCRIBE to unsubscribe from
@@ -341,7 +340,7 @@ static int subscribeToTopic( MQTTContextHandle_t pMqttContext );
  * @return EXIT_SUCCESS if UNSUBSCRIBE was successfully sent;
  * EXIT_FAILURE otherwise.
  */
-static int unsubscribeFromTopic( MQTTContextHandle_t pMqttContext );
+static int unsubscribeFromTopic( MQTTAgentContext_t * pMqttContext );
 
 /**
  * @brief Sends an MQTT PUBLISH to #MQTT_EXAMPLE_TOPIC defined at
@@ -352,7 +351,7 @@ static int unsubscribeFromTopic( MQTTContextHandle_t pMqttContext );
  * @return EXIT_SUCCESS if PUBLISH was successfully sent;
  * EXIT_FAILURE otherwise.
  */
-static int publishToTopic( MQTTContextHandle_t pMqttContext );
+static int publishToTopic( MQTTAgentContext_t * pMqttContext );
 
 /**
  * @brief Function to handle resubscription of topics on Subscribe
@@ -360,7 +359,7 @@ static int publishToTopic( MQTTContextHandle_t pMqttContext );
  *
  * @param[in] pMqttContext MQTT context pointer.
  */
-static int handleResubscribe( MQTTContextHandle_t pMqttContext );
+static int handleResubscribe( MQTTAgentContext_t * pMqttContext );
 
 /*-----------------------------------------------------------*/
 
@@ -373,12 +372,11 @@ static uint32_t generateRandomNumber()
 
 /*-----------------------------------------------------------*/
 
-static void handleIncomingPublish( MQTTPublishInfo_t * pPublishInfo,
-                                   void * packetIdentifier )
+static void handleIncomingPublish( void * pUnused, MQTTPublishInfo_t * pPublishInfo )
 {
     assert( pPublishInfo != NULL );
 
-    ( void ) packetIdentifier;
+    ( void ) pUnused;
 
     /* Process incoming Publish. */
     LogInfo( ( "Incoming QOS : %d.", pPublishInfo->qos ) );
@@ -408,7 +406,7 @@ static void handleIncomingPublish( MQTTPublishInfo_t * pPublishInfo,
 #define CONNECTION_RETRY_MAX_ATTEMPTS            ( 5U )
 #define CONNECTION_RETRY_MAX_BACKOFF_DELAY_MS    ( 5000U )
 #define CONNECTION_RETRY_BACKOFF_BASE_MS         ( 500U )
-static int handleResubscribe( MQTTContextHandle_t pMqttContext )
+static int handleResubscribe( MQTTAgentContext_t * pMqttContext )
 {
     int returnStatus = EXIT_SUCCESS;
     MQTTStatus_t mqttStatus = MQTTSuccess;
@@ -474,7 +472,7 @@ static int handleResubscribe( MQTTContextHandle_t pMqttContext )
 
 /*-----------------------------------------------------------*/
 
-static int subscribeToTopic( MQTTContextHandle_t pMqttContext )
+static int subscribeToTopic( MQTTAgentContext_t * pMqttContext )
 {
     int returnStatus = EXIT_SUCCESS;
     MQTTStatus_t mqttStatus;
@@ -513,7 +511,7 @@ static int subscribeToTopic( MQTTContextHandle_t pMqttContext )
 
 /*-----------------------------------------------------------*/
 
-static int unsubscribeFromTopic( MQTTContextHandle_t pMqttContext )
+static int unsubscribeFromTopic( MQTTAgentContext_t * pMqttContext )
 {
     int returnStatus = EXIT_SUCCESS;
     MQTTStatus_t mqttStatus;
@@ -549,7 +547,7 @@ static int unsubscribeFromTopic( MQTTContextHandle_t pMqttContext )
 
 /*-----------------------------------------------------------*/
 
-static int publishToTopic( MQTTContextHandle_t pMqttContext )
+static int publishToTopic( MQTTAgentContext_t * pMqttContext )
 {
     int returnStatus = EXIT_SUCCESS;
     MQTTStatus_t mqttStatus = MQTTSuccess;
@@ -585,7 +583,7 @@ static int publishToTopic( MQTTContextHandle_t pMqttContext )
 
 /*-----------------------------------------------------------*/
 
-static int subscribePublishLoop( MQTTContextHandle_t pMqttContext,
+static int subscribePublishLoop( MQTTAgentContext_t * pMqttContext,
                                  bool * pClientSessionPresent )
 {
     int returnStatus = EXIT_SUCCESS;
@@ -672,7 +670,7 @@ static int subscribePublishLoop( MQTTContextHandle_t pMqttContext,
  */
 void * mutual_auth_demo( void * args )
 {
-    MQTTContextHandle_t contextHandle = ( MQTTContextHandle_t ) args;
+    MQTTAgentContext_t * contextHandle = ( MQTTAgentContext_t * ) args;
     int returnStatus = EXIT_SUCCESS, i = 0;
 
     for( i = 0; i < 1; i++ )

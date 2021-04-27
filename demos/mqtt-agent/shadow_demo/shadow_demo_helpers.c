@@ -121,8 +121,8 @@ typedef struct PublishPackets
  */
 static PublishPackets_t outgoingPublishPackets[ MAX_OUTGOING_PUBLISHES ];
 
-static IncomingPublishCallback_t shadowCallback = NULL;
-static MQTTContextHandle_t contextHandle = 1;
+static IncomingPubCallback_t shadowCallback = NULL;
+static MQTTAgentContext_t * contextHandle;
 
 /*-----------------------------------------------------------*/
 
@@ -136,7 +136,7 @@ void HandleOtherIncomingPacket( MQTTPacketInfo_t * pPacketInfo,
 
 /*-----------------------------------------------------------*/
 
-int EstablishMqttSession1( MQTTContextHandle_t handle, IncomingPublishCallback_t publishCallback )
+int EstablishMqttSession1( MQTTAgentContext_t * handle, IncomingPubCallback_t publishCallback )
 {
     int returnStatus = EXIT_SUCCESS;
     shadowCallback = publishCallback;

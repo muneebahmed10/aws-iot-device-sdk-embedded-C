@@ -40,3 +40,6 @@
 [submodule "demos/jobs/jobs_demo_mosquitto/libmosquitto"]
 	path = demos/jobs/jobs_demo_mosquitto/libmosquitto
 	url = https://github.com/eclipse/mosquitto.git
+[submodule "demos/mqtt-agent/coreMQTT-Agent"]
+	path = demos/mqtt-agent/coreMQTT-Agent
+	url = https://github.com/FreeRTOS/coreMQTT-Agent.git
