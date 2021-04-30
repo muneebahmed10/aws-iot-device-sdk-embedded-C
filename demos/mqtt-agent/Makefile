@@ -27,7 +27,13 @@ AGENT_SRCS = $(shell find ./coreMQTT-Agent/source -name '*.c')
 
 FLAGS = -g -O0 -Wall -Wextra -Wpedantic
 
-LDFLAGS = -L/usr/local/opt/openssl@1.1/lib -lssl -lcrypto
+UNAME := $(shell uname)
+
+ifeq ($(UNAME), Darwin)
+	LDFLAGS = -L/usr/local/opt/openssl@1.1/lib -lssl -lcrypto
+else
+	LDFLAGS = -L/usr/lib -lssl -lcrypto -pthread
+endif
 
 OBJECTS := $(wildcard */*.o)
 SHADOW_OBJECTS = shadow_demo/shadow.o \
@@ -49,7 +55,7 @@ mqtt_agent_command_functions.o: core_mqtt_config.h
 	$(CC) $(FLAGS) $(INCLUDE_DIRS) coreMQTT-Agent/source/mqtt_agent_command_functions.c -c -o $@
 
 mqtt_agent_helper.o: agent_helper/mqtt_agent_helper.c agent_helper/mqtt_agent_helper.h
-	$(CC) -undefined dynamic_lookup $(FLAGS) $(INCLUDE_DIRS) $< -c -o $@
+	$(CC) $(FLAGS) $(INCLUDE_DIRS) $< -c -o $@
 
 mqtt_demo_plaintext.o: mqtt_demo/mqtt_demo_plaintext.c
 	$(CC) $(FLAGS) $(INCLUDE_DIRS) $< -c -o $@
