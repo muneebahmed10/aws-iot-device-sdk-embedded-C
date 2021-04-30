@@ -39,7 +39,7 @@
 #include "core_mqtt.h"
 
 /* MQTT agent include. */
-#include "mqtt_agent.h"
+#include "core_mqtt_agent.h"
 
 /* MQTT Agent interface. */
 #include "posix_agent_interface.h"
@@ -289,7 +289,7 @@ static uint8_t networkBuffers[ MQTT_AGENT_MAX_SIMULTANEOUS_CONNECTIONS ][ MQTT_A
 
 static MQTTAgentContext_t mqttAgentContexts[ MQTT_AGENT_MAX_SIMULTANEOUS_CONNECTIONS ];
 
-static AgentMessageContext_t messageContexts[ MQTT_AGENT_MAX_SIMULTANEOUS_CONNECTIONS ];
+static MQTTAgentMessageContext_t messageContexts[ MQTT_AGENT_MAX_SIMULTANEOUS_CONNECTIONS ];
 
 static SubscriptionElement_t subscriptionLists[ MQTT_AGENT_MAX_SIMULTANEOUS_CONNECTIONS ][ SUBSCRIPTION_MANAGER_MAX_SUBSCRIPTIONS ];
 
@@ -320,7 +320,7 @@ static MQTTStatus_t prvMQTTInit( int32_t mqttContextHandle )
     TransportInterface_t xTransport;
     MQTTStatus_t xReturn;
     MQTTFixedBuffer_t networkBuffer;
-    AgentMessageInterface_t messageInterface = {
+    MQTTAgentMessageInterface_t messageInterface = {
         .pMsgCtx = NULL,
         .send = Agent_MessageSend,
         .recv = Agent_MessageReceive,
@@ -764,7 +764,7 @@ static void prvConnectAndCreateDemoTasks( void * pvParameters )
     {
         pthread_join( plaintexts[ i ], NULL );
     }
-    CommandInfo_t disconnectInfo;
+    MQTTAgentCommandInfo_t disconnectInfo;
     disconnectInfo.cmdCompleteCallback = NULL;
     disconnectInfo.pCmdCompleteCallbackContext = NULL;
     disconnectInfo.blockTimeMs = 0;

@@ -49,10 +49,10 @@ all: mqtt_agent.o mqtt_agent_command_functions.o mqtt_agent_helper.o mqtt_demo_p
 	$(CC) $(FLAGS) $(INCLUDE_DIRS) $(SRC_FILES) $^ $(LDFLAGS) -o mqtt_agent_demo
 
 mqtt_agent.o: core_mqtt_config.h
-	$(CC) $(FLAGS) $(INCLUDE_DIRS) coreMQTT-Agent/source/mqtt_agent.c -c -o $@
+	$(CC) $(FLAGS) $(INCLUDE_DIRS) coreMQTT-Agent/source/core_mqtt_agent.c -c -o $@
 
 mqtt_agent_command_functions.o: core_mqtt_config.h
-	$(CC) $(FLAGS) $(INCLUDE_DIRS) coreMQTT-Agent/source/mqtt_agent_command_functions.c -c -o $@
+	$(CC) $(FLAGS) $(INCLUDE_DIRS) coreMQTT-Agent/source/core_mqtt_agent_command_functions.c -c -o $@
 
 mqtt_agent_helper.o: agent_helper/mqtt_agent_helper.c agent_helper/mqtt_agent_helper.h
 	$(CC) $(FLAGS) $(INCLUDE_DIRS) $< -c -o $@

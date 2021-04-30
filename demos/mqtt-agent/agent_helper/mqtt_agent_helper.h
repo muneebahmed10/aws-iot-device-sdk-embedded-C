@@ -30,7 +30,7 @@
 #include <pthread.h>
 
 /* MQTT Agent includes. */
-#include "mqtt_agent.h"
+#include "core_mqtt_agent.h"
 
 #include "subscription_manager.h"
 
@@ -39,7 +39,7 @@
 
 /*-----------------------------------------------------------*/
 
-struct CommandContext
+struct MQTTAgentCommandContext
 {
     MQTTStatus_t ret;
     bool completed;

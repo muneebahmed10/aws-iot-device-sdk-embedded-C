@@ -25,26 +25,26 @@
 #include <unistd.h>
 #include <pthread.h>
 
-#include "agent_message.h"
-#include "mqtt_agent.h"
+#include "core_mqtt_agent_message_interface.h"
+#include "core_mqtt_agent.h"
 
 #include "demo_queue.h"
 
-struct AgentMessageContext
+struct MQTTAgentMessageContext
 {
     DeQueue_t queue;
 };
 
-bool Agent_MessageSend( AgentMessageContext_t * pMsgCtx,
-                       Command_t * const * pCommandToSend,
+bool Agent_MessageSend( MQTTAgentMessageContext_t * pMsgCtx,
+                       MQTTAgentCommand_t * const * pCommandToSend,
                        uint32_t blockTimeMs );
 
-bool Agent_MessageReceive( AgentMessageContext_t * pMsgCtx,
-                           Command_t ** pReceivedCommand,
+bool Agent_MessageReceive( MQTTAgentMessageContext_t * pMsgCtx,
+                           MQTTAgentCommand_t ** pReceivedCommand,
                            uint32_t blockTimeMs );
 
-Command_t * Agent_GetCommand( uint32_t blockTimeMs );
-bool Agent_FreeCommand( Command_t * pCommandToRelease );
+MQTTAgentCommand_t * Agent_GetCommand( uint32_t blockTimeMs );
+bool Agent_FreeCommand( MQTTAgentCommand_t * pCommandToRelease );
 
 #endif /* ifndef DEMO_QUEUE_H_ */
 

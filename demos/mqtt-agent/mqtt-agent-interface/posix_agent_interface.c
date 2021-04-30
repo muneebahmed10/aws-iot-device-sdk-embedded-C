@@ -32,8 +32,8 @@
 #include "demo_queue.h"
 #include "clock.h"
 
-bool Agent_MessageSend( AgentMessageContext_t * pMsgCtx,
-                        Command_t * const * pCommandToSend,
+bool Agent_MessageSend( MQTTAgentMessageContext_t * pMsgCtx,
+                        MQTTAgentCommand_t * const * pCommandToSend,
                         uint32_t blockTimeMs )
 {
     bool ret = false;
@@ -41,15 +41,15 @@ bool Agent_MessageSend( AgentMessageContext_t * pMsgCtx,
     if( ( pMsgCtx != NULL ) && ( pCommandToSend != NULL ) )
     {
         DeQueue_t * pQueue = &( pMsgCtx->queue );
-        DeQueueElement_t * pNewElement = DeQueueElement_Create( *pCommandToSend, sizeof( Command_t * ), free );
+        DeQueueElement_t * pNewElement = DeQueueElement_Create( *pCommandToSend, sizeof( MQTTAgentCommand_t * ), free );
         DeQueue_PushBack( pQueue, pNewElement );
         ret = true;
     }
     return ret;
 }
 
-bool Agent_MessageReceive( AgentMessageContext_t * pMsgCtx,
-                           Command_t ** pReceivedCommand,
+bool Agent_MessageReceive( MQTTAgentMessageContext_t * pMsgCtx,
+                           MQTTAgentCommand_t ** pReceivedCommand,
                            uint32_t blockTimeMs )
 {
     bool ret = false;
@@ -58,7 +58,7 @@ bool Agent_MessageReceive( AgentMessageContext_t * pMsgCtx,
     {
         DeQueue_t * pQueue = &( pMsgCtx->queue );
         DeQueueElement_t * pReceivedElement = NULL;
-        Command_t * pCommand = NULL;
+        MQTTAgentCommand_t * pCommand = NULL;
         for( counter = 0; counter < 2; counter++ )
         {
             pReceivedElement = DeQueue_PopFront( pQueue );
@@ -73,7 +73,7 @@ bool Agent_MessageReceive( AgentMessageContext_t * pMsgCtx,
         }
         if( pReceivedElement != NULL )
         {
-            pCommand = ( Command_t * ) pReceivedElement->pData;
+            pCommand = ( MQTTAgentCommand_t * ) pReceivedElement->pData;
             *pReceivedCommand = pCommand;
             ret = true;
             free( pReceivedElement );
@@ -82,15 +82,15 @@ bool Agent_MessageReceive( AgentMessageContext_t * pMsgCtx,
     return ret;
 }
 
-Command_t * Agent_GetCommand( uint32_t blockTimeMs )
+MQTTAgentCommand_t * Agent_GetCommand( uint32_t blockTimeMs )
 {
-    Command_t * pCommand = ( Command_t * ) malloc( sizeof( Command_t ) );
+    MQTTAgentCommand_t * pCommand = ( MQTTAgentCommand_t * ) malloc( sizeof( MQTTAgentCommand_t ) );
     ( void ) blockTimeMs;
-    memset( pCommand, 0x00, sizeof( Command_t ) );
+    memset( pCommand, 0x00, sizeof( MQTTAgentCommand_t ) );
     return pCommand;
 }
 
-bool Agent_FreeCommand( Command_t * pCommandToRelease )
+bool Agent_FreeCommand( MQTTAgentCommand_t * pCommandToRelease )
 {
     free( pCommandToRelease );
     return true;

@@ -21,7 +21,7 @@
  */
 
 /**
- * @file mqtt_agent.c
+ * @file mqtt_agent_helper.c
  * @brief Implements an MQTT agent (or daemon task) to enable multithreaded access to
  * coreMQTT.
  *
@@ -51,24 +51,24 @@
 /* MQTT agent include. */
 #include "core_mqtt_serializer.h"
 #include "mqtt_agent_helper.h"
-#include "mqtt_agent.h"
+#include "core_mqtt_agent.h"
 
 /*-----------------------------------------------------------*/
 
 
-static void commandCompleteCallback( void * pContext, MQTTAgentReturnInfo_t * pReturnInfo );
+static void commandCompleteCallback( MQTTAgentCommandContext_t * pContext, MQTTAgentReturnInfo_t * pReturnInfo );
 
-static void subscribeCommandCallback( void * pContext, MQTTAgentReturnInfo_t * pReturnInfo );
+static void subscribeCommandCallback( MQTTAgentCommandContext_t * pContext, MQTTAgentReturnInfo_t * pReturnInfo );
 
-static MQTTStatus_t waitForCommand( CommandContext_t * pContext );
+static MQTTStatus_t waitForCommand( MQTTAgentCommandContext_t * pContext );
 
-static CommandInfo_t * setupCommandInfo( CommandInfo_t * pCommandInfo, CommandContext_t * pContext );
+static MQTTAgentCommandInfo_t * setupCommandInfo( MQTTAgentCommandInfo_t * pCommandInfo, MQTTAgentCommandContext_t * pContext );
 
 /*-----------------------------------------------------------*/
 
-static void commandCompleteCallback( void * pContext, MQTTAgentReturnInfo_t * pReturnInfo )
+static void commandCompleteCallback( MQTTAgentCommandContext_t * pContext, MQTTAgentReturnInfo_t * pReturnInfo )
 {
-    CommandContext_t * pCmdContext = ( CommandContext_t * ) pContext;
+    MQTTAgentCommandContext_t * pCmdContext = pContext;
     pthread_mutex_lock( &( pCmdContext->lock ) );
     pCmdContext->ret = pReturnInfo->returnCode;
     pCmdContext->completed = true;
@@ -76,9 +76,9 @@ static void commandCompleteCallback( void * pContext, MQTTAgentReturnInfo_t * pR
     pthread_cond_broadcast( &( pCmdContext->cond ) );
 }
 
-static void subscribeCommandCallback( void * pContext, MQTTAgentReturnInfo_t * pReturnInfo )
+static void subscribeCommandCallback( MQTTAgentCommandContext_t * pContext, MQTTAgentReturnInfo_t * pReturnInfo )
 {
-    CommandContext_t * pCmdContext = ( CommandContext_t * ) pContext;
+    MQTTAgentCommandContext_t * pCmdContext = pContext;
     size_t i;
 
     if( ( pReturnInfo->returnCode == MQTTSuccess ) && ( pCmdContext->pSubscribeArgs != NULL ) )
@@ -111,7 +111,7 @@ static void subscribeCommandCallback( void * pContext, MQTTAgentReturnInfo_t * p
 
 /*-----------------------------------------------------------*/
 
-static MQTTStatus_t waitForCommand( CommandContext_t * pContext )
+static MQTTStatus_t waitForCommand( MQTTAgentCommandContext_t * pContext )
 {
     struct timespec now;
     clock_gettime( CLOCK_REALTIME, &now );
@@ -131,9 +131,9 @@ static MQTTStatus_t waitForCommand( CommandContext_t * pContext )
 
 /*-----------------------------------------------------------*/
 
-static CommandInfo_t * setupCommandInfo( CommandInfo_t * pCommandInfo, CommandContext_t * pContext )
+static MQTTAgentCommandInfo_t * setupCommandInfo( MQTTAgentCommandInfo_t * pCommandInfo, MQTTAgentCommandContext_t * pContext )
 {
-    memset( pCommandInfo, 0x00, sizeof( CommandInfo_t ) );
+    memset( pCommandInfo, 0x00, sizeof( MQTTAgentCommandInfo_t ) );
     pCommandInfo->cmdCompleteCallback = commandCompleteCallback;
     pCommandInfo->pCmdCompleteCallbackContext = pContext;
     pCommandInfo->blockTimeMs = 0;
@@ -147,7 +147,7 @@ MQTTStatus_t MQTTAgent_SubscribeBlock( MQTTAgentContext_t * pAgentContext,
                                        IncomingPubCallback_t incomingPublishCallback,
                                        void * incomingPublishCallbackContext )
 {
-    CommandContext_t context = { .lock = PTHREAD_MUTEX_INITIALIZER,
+    MQTTAgentCommandContext_t context = { .lock = PTHREAD_MUTEX_INITIALIZER,
                                  .cond = PTHREAD_COND_INITIALIZER,
                                  .completed = false,
                                  .ret = MQTTRecvFailed,
@@ -155,7 +155,7 @@ MQTTStatus_t MQTTAgent_SubscribeBlock( MQTTAgentContext_t * pAgentContext,
                                  .pIncomingPublishCallbackContext = incomingPublishCallbackContext,
                                  .pSubscribeArgs = NULL,
                                  .pSubscriptionList = NULL };
-    CommandInfo_t commandInfo;
+    MQTTAgentCommandInfo_t commandInfo;
     MQTTAgentSubscribeArgs_t subscribeArgs;
     subscribeArgs.pSubscribeInfo = pSubscriptionInfo;
     subscribeArgs.numSubscriptions = 1U;
@@ -181,7 +181,7 @@ MQTTStatus_t MQTTAgent_SubscribeBlock( MQTTAgentContext_t * pAgentContext,
 MQTTStatus_t MQTTAgent_UnsubscribeBlock( MQTTAgentContext_t * pAgentContext,
                                          MQTTSubscribeInfo_t * pSubscriptionList )
 {
-    CommandContext_t context = { .lock = PTHREAD_MUTEX_INITIALIZER,
+    MQTTAgentCommandContext_t context = { .lock = PTHREAD_MUTEX_INITIALIZER,
                                  .cond = PTHREAD_COND_INITIALIZER,
                                  .completed = false,
                                  .ret = MQTTRecvFailed,
@@ -189,7 +189,7 @@ MQTTStatus_t MQTTAgent_UnsubscribeBlock( MQTTAgentContext_t * pAgentContext,
                                  .pIncomingPublishCallbackContext = NULL,
                                  .pSubscribeArgs = NULL,
                                  .pSubscriptionList = NULL };
-    CommandInfo_t commandInfo;
+    MQTTAgentCommandInfo_t commandInfo;
     MQTTAgentSubscribeArgs_t subscribeArgs;
     subscribeArgs.pSubscribeInfo = pSubscriptionList;
     subscribeArgs.numSubscriptions = 1U;
@@ -215,7 +215,7 @@ MQTTStatus_t MQTTAgent_UnsubscribeBlock( MQTTAgentContext_t * pAgentContext,
 MQTTStatus_t MQTTAgent_PublishBlock( MQTTAgentContext_t * pAgentContext,
                                      MQTTPublishInfo_t * pPublishInfo )
 {
-    CommandContext_t context = { .lock = PTHREAD_MUTEX_INITIALIZER,
+    MQTTAgentCommandContext_t context = { .lock = PTHREAD_MUTEX_INITIALIZER,
                                  .cond = PTHREAD_COND_INITIALIZER,
                                  .completed = false,
                                  .ret = MQTTRecvFailed,
@@ -223,7 +223,7 @@ MQTTStatus_t MQTTAgent_PublishBlock( MQTTAgentContext_t * pAgentContext,
                                  .pIncomingPublishCallbackContext = NULL,
                                  .pSubscribeArgs = NULL,
                                  .pSubscriptionList = NULL };
-    CommandInfo_t commandInfo;
+    MQTTAgentCommandInfo_t commandInfo;
     MQTTAgent_Publish( pAgentContext,
                        pPublishInfo,
                        setupCommandInfo( &commandInfo, &context ) );
@@ -234,7 +234,7 @@ MQTTStatus_t MQTTAgent_PublishBlock( MQTTAgentContext_t * pAgentContext,
 
 MQTTStatus_t MQTTAgent_ProcessLoopBlock( MQTTAgentContext_t * pAgentContext )
 {
-    CommandContext_t context = { .lock = PTHREAD_MUTEX_INITIALIZER,
+    MQTTAgentCommandContext_t context = { .lock = PTHREAD_MUTEX_INITIALIZER,
                                  .cond = PTHREAD_COND_INITIALIZER,
                                  .completed = false,
                                  .ret = MQTTRecvFailed,
@@ -242,7 +242,7 @@ MQTTStatus_t MQTTAgent_ProcessLoopBlock( MQTTAgentContext_t * pAgentContext )
                                  .pIncomingPublishCallbackContext = NULL,
                                  .pSubscribeArgs = NULL,
                                  .pSubscriptionList = NULL };
-    CommandInfo_t commandInfo;
+    MQTTAgentCommandInfo_t commandInfo;
     MQTTAgent_ProcessLoop( pAgentContext, setupCommandInfo( &commandInfo, &context ) );
     return waitForCommand( &context );
 }
@@ -251,7 +251,7 @@ MQTTStatus_t MQTTAgent_ProcessLoopBlock( MQTTAgentContext_t * pAgentContext )
 
 MQTTStatus_t MQTTAgent_PingBlock( MQTTAgentContext_t * pAgentContext )
 {
-    CommandContext_t context = { .lock = PTHREAD_MUTEX_INITIALIZER,
+    MQTTAgentCommandContext_t context = { .lock = PTHREAD_MUTEX_INITIALIZER,
                                  .cond = PTHREAD_COND_INITIALIZER,
                                  .completed = false,
                                  .ret = MQTTRecvFailed,
@@ -259,7 +259,7 @@ MQTTStatus_t MQTTAgent_PingBlock( MQTTAgentContext_t * pAgentContext )
                                  .pIncomingPublishCallbackContext = NULL,
                                  .pSubscribeArgs = NULL,
                                  .pSubscriptionList = NULL };
-    CommandInfo_t commandInfo;
+    MQTTAgentCommandInfo_t commandInfo;
     MQTTAgent_Ping( pAgentContext, setupCommandInfo( &commandInfo, &context ) );
     return waitForCommand( &context );
 }
@@ -268,7 +268,7 @@ MQTTStatus_t MQTTAgent_PingBlock( MQTTAgentContext_t * pAgentContext )
 
 MQTTStatus_t MQTTAgent_DisconnectBlock( MQTTAgentContext_t * pAgentContext )
 {
-    CommandContext_t context = { .lock = PTHREAD_MUTEX_INITIALIZER,
+    MQTTAgentCommandContext_t context = { .lock = PTHREAD_MUTEX_INITIALIZER,
                                  .cond = PTHREAD_COND_INITIALIZER,
                                  .completed = false,
                                  .ret = MQTTRecvFailed,
@@ -276,7 +276,7 @@ MQTTStatus_t MQTTAgent_DisconnectBlock( MQTTAgentContext_t * pAgentContext )
                                  .pIncomingPublishCallbackContext = NULL,
                                  .pSubscribeArgs = NULL,
                                  .pSubscriptionList = NULL };
-    CommandInfo_t commandInfo;
+    MQTTAgentCommandInfo_t commandInfo;
     MQTTAgent_Disconnect( pAgentContext, setupCommandInfo( &commandInfo, &context ) );
     return waitForCommand( &context );
 }
