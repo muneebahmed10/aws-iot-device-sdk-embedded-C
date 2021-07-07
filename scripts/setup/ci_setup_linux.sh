@@ -17,9 +17,10 @@ if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then
         sudo apt-get install -y mosquitto;
     fi
 
-    # Install graphviz for documentation builds.
+    # Install graphviz and beatifulsoup for documentation builds.
     if [ "$RUN_TEST" = "doc" ]; then
-        sudo apt-get install -y graphviz;
+        sudo apt-get install -y graphviz python3-setuptools python3-pip;
+        pip3 install --user beautifulsoup4;
     fi
 
     # Install util-linux and spell for spelling checks.
